@@ -1,0 +1,25 @@
+{
+  "name": "KUET ESE 3-2 Hub (2K22 Batch)",
+  "short_name": "ESE 3-2 Hub",
+  "description": "Class Routine, Study Materials Drive Vault, CT Tracker & CGPA Calculator for KUET ESE 2K22 Batch.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020617",
+  "theme_color": "#059669",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='115' fill='%23059669'/%3E%3Cpath d='M293.3 64L128 288h128l-21.3 160L400 224H272l21.3-160z' fill='white'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='115' fill='%23059669'/%3E%3Cpath d='M293.3 64L128 288h128l-21.3 160L400 224H272l21.3-160z' fill='white'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
