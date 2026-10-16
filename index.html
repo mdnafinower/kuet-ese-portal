@@ -32,6 +32,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
 
+    <!-- Firebase Cloud & Push Notification SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
+
     <!-- Custom External Stylesheet -->
     <link rel="stylesheet" href="css/styles.css">
 
@@ -155,6 +160,11 @@
                 <button id="adminToggleBtn" onclick="handleAdminToggle()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition">
                     <i data-lucide="shield-check" class="w-4 h-4 text-amber-500"></i>
                     <span id="adminBtnText">Admin</span>
+                </button>
+
+                <button onclick="requestPushNotificationPermission()" class="px-3 py-1 rounded-lg bg-teal-700 hover:bg-teal-600 text-white font-semibold transition flex items-center gap-1.5" title="Enable device push notifications">
+                     <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+                      Enable Notifications
                 </button>
 
                 <button onclick="toggleTheme()" class="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition" title="Toggle Dark Mode">
