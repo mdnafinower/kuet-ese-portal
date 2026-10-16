@@ -21,6 +21,13 @@
         }
     </script>
 
+    <!-- Instant Personal Theme Loader (Add inside <head> of index.html) -->
+    <script>
+        if (localStorage.getItem('kuet_ese32_theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+
     <!-- Google Fonts & Lucide Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
