@@ -1372,3 +1372,56 @@ function toggleTheme() {
 }
 
 window.addEventListener('DOMContentLoaded', initPortal);
+
+// ================= PWA SERVICE WORKER & INSTALL APP LOGIC =================
+let deferredInstallPrompt = null;
+
+// 1. Register Service Worker
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+            console.warn('Service Worker registration failed:', err);
+        });
+    });
+}
+
+// 2. Hide Install Button if already running inside the installed standalone app
+if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    window.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('installAppBtn');
+        if (btn) btn.classList.add('hidden');
+    });
+}
+
+// 3. Capture native Android Chrome / Edge / Desktop install prompt
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const btn = document.getElementById('installAppBtn');
+    if (btn) btn.classList.remove('hidden');
+});
+
+// 4. Trigger Install when user taps "Install App"
+async function triggerInstallApp() {
+    if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        if (outcome === 'accepted') {
+            const btn = document.getElementById('installAppBtn');
+            if (btn) btn.classList.add('hidden');
+        }
+        deferredInstallPrompt = null;
+    } else {
+        // Fallback guide for iPhone (Safari) or browsers where native prompt already fired
+        alert(
+            "📲 To install ESE 3-2 Hub as an App on your device:\n\n" +
+            "• Android (Chrome): Tap the 3 dots (⋮) at the top-right and select 'Add to Home screen' or 'Install app'.\n\n" +
+            "• iPhone (Safari): Tap the 'Share' button at the bottom and select 'Add to Home Screen'."
+        );
+    }
+}
+
+window.addEventListener('appinstalled', () => {
+    const btn = document.getElementById('installAppBtn');
+    if (btn) btn.classList.add('hidden');
+});
