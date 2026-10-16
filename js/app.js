@@ -1,18 +1,42 @@
 /* ==========================================================================
    KUET ESE 3-2 Portal — Main Application Logic (js/app.js)
+   Includes Persistent Individual Storage (Theme, CT Marks, CGPA) & Friday 12AM Reset
    ========================================================================== */
+
+// ================= SAFE LOCAL STORAGE HELPERS =================
+function saveLocal(key, value) {
+    try {
+        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    } catch (e) {
+        console.warn('Browser storage restricted:', e);
+    }
+}
+
+function loadLocal(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (raw === null) return fallback;
+        return JSON.parse(raw);
+    } catch (e) {
+        return fallback;
+    }
+}
 
 // ================= WEEKLY AUTO-REFRESH ENGINE (RESETS FRIDAY 12:00 AM) =================
 function getCurrentAcademicWeekInfo() {
     const now = new Date();
-    const dayOfWeek = now.getDay(); 
+    const dayOfWeek = now.getDay(); // 0 = Sun, 1 = Mon, ..., 5 = Fri, 6 = Sat
+
+    // Friday (5) -> 0 days ago | Saturday (6) -> 1 day ago | Sunday (0) -> 2 days ago
     const daysSinceFriday = (dayOfWeek + 2) % 7;
     const cycleStartFriday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceFriday);
+
     const classSunday = new Date(cycleStartFriday.getFullYear(), cycleStartFriday.getMonth(), cycleStartFriday.getDate() + 2);
     const classThursday = new Date(cycleStartFriday.getFullYear(), cycleStartFriday.getMonth(), cycleStartFriday.getDate() + 6);
+
     const weekId = `FRI-${cycleStartFriday.getFullYear()}-${String(cycleStartFriday.getMonth() + 1).padStart(2, '0')}-${String(cycleStartFriday.getDate()).padStart(2, '0')}`;
     const rangeText = `Week: ${classSunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${classThursday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-    
+
     return { weekId, rangeText };
 }
 
@@ -47,27 +71,45 @@ function refreshRoutineKeepEditedRegulars(currentRoutine, fallbackRegularRoutine
     return refreshed;
 }
 
-// ================= STATE & ADMIN STORAGE =================
+// ================= STATE & INDIVIDUAL USER STORAGE =================
 let isAdmin = false;
 let currentSelectedDay = "Sunday";
 let adminPin = localStorage.getItem('kuet_ese32_pin') || '2022';
 let masterDriveUrl = localStorage.getItem('kuet_ese32_master_drive') || 'https://drive.google.com';
-let courseDriveLinks = JSON.parse(localStorage.getItem('kuet_ese32_course_drives') || '{}');
-let customResources = JSON.parse(localStorage.getItem('kuet_ese32_resources') || '[]');
+let courseDriveLinks = loadLocal('kuet_ese32_course_drives', {});
+let customResources = loadLocal('kuet_ese32_resources', []);
 
-let baseRegularRoutine = JSON.parse(localStorage.getItem('kuet_ese32_base_routine') || JSON.stringify(getInitialSeedRoutine()));
-let masterRoutine = JSON.parse(localStorage.getItem('kuet_ese32_master_routine') || JSON.stringify(baseRegularRoutine));
+let baseRegularRoutine = loadLocal('kuet_ese32_base_routine', getInitialSeedRoutine());
+let masterRoutine = loadLocal('kuet_ese32_master_routine', baseRegularRoutine);
 
-let notices = JSON.parse(localStorage.getItem('kuet_ese32_notices') || JSON.stringify([
+let notices = loadLocal('kuet_ese32_notices', [
     { date: "Pinned", type: "info", persistent: true, text: "All theory classes are held in Room ESE-506 (Block-D, Academic Building 1)." },
     { date: "Lab Update", type: "info", persistent: true, text: "Wednesday 2:30 PM Lab alternates between ESE 3204 (MSH+AA) and ESE 3218 (MR+KS)." }
-]));
+]);
 
-let ctData = JSON.parse(localStorage.getItem('kuet_ese32_cts') || JSON.stringify(getDefaultCTData()));
+// CT structure (syllabus/status) + separate Personal CT Marks so every student's marks stay safe
+let ctData = loadLocal('kuet_ese32_cts', getDefaultCTData());
+let personalCTMarks = loadLocal('kuet_ese32_personal_marks', {});
+
+// Personal CGPA State (Saves Term GPAs 1-1 to 3-1, Direct CGPA, and Course Rows per student)
+let personalCGPAState = loadLocal('kuet_ese32_personal_cgpa_state', {
+    mode: 'terms',
+    termGPAs: {
+        termGpa_1_1: "",
+        termGpa_1_2: "",
+        termGpa_2_1: "",
+        termGpa_2_2: "",
+        termGpa_3_1: ""
+    },
+    directCredits: "",
+    directCGPA: "",
+    activePresetLabel: "3rd Year 2nd Term (3-2) — 20.50 Credits"
+});
+
+let prevCalcMode = personalCGPAState.mode || 'terms';
+let generalCalcRows = loadLocal('kuet_general_cgpa_rows', JSON.parse(JSON.stringify(ESE_SEMESTER_PRESETS["3-2"].courses)));
+
 let activeCourseModalCode = null;
-let prevCalcMode = 'terms';
-let generalCalcRows = JSON.parse(localStorage.getItem('kuet_general_cgpa_rows') || 'null') ||
-                      JSON.parse(JSON.stringify(ESE_SEMESTER_PRESETS["3-2"].courses));
 
 function checkAndRunWeeklyAutoRefresh() {
     const { weekId, rangeText } = getCurrentAcademicWeekInfo();
@@ -80,12 +122,12 @@ function checkAndRunWeeklyAutoRefresh() {
         masterRoutine = refreshRoutineKeepEditedRegulars(masterRoutine, baseRegularRoutine);
         baseRegularRoutine = JSON.parse(JSON.stringify(masterRoutine));
 
-        localStorage.setItem('kuet_ese32_master_routine', JSON.stringify(masterRoutine));
-        localStorage.setItem('kuet_ese32_base_routine', JSON.stringify(baseRegularRoutine));
+        saveLocal('kuet_ese32_master_routine', masterRoutine);
+        saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
         localStorage.setItem('kuet_ese32_week_id', weekId);
 
         notices = notices.filter(n => n.persistent || (n.type !== 'canceled' && n.type !== 'extra' && !n.isWeeklyTemp));
-        localStorage.setItem('kuet_ese32_notices', JSON.stringify(notices));
+        saveLocal('kuet_ese32_notices', notices);
     }
 }
 
@@ -96,11 +138,11 @@ function manualWeeklyRefresh() {
     masterRoutine = refreshRoutineKeepEditedRegulars(masterRoutine, baseRegularRoutine);
     baseRegularRoutine = JSON.parse(JSON.stringify(masterRoutine));
 
-    localStorage.setItem('kuet_ese32_master_routine', JSON.stringify(masterRoutine));
-    localStorage.setItem('kuet_ese32_base_routine', JSON.stringify(baseRegularRoutine));
+    saveLocal('kuet_ese32_master_routine', masterRoutine);
+    saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
 
     notices = notices.filter(n => n.persistent || (n.type !== 'canceled' && n.type !== 'extra' && !n.isWeeklyTemp));
-    localStorage.setItem('kuet_ese32_notices', JSON.stringify(notices));
+    saveLocal('kuet_ese32_notices', notices);
 
     renderMasterRoutineTable();
     renderDaySchedule(currentSelectedDay);
@@ -109,7 +151,12 @@ function manualWeeklyRefresh() {
 
 // ================= INITIALIZATION =================
 function initPortal() {
+    // 1. Restore individual user's saved Dark/Light theme immediately
+    applySavedTheme();
+
+    // 2. Check weekly routine cycle (Friday 12:00 AM rollover)
     checkAndRunWeeklyAutoRefresh();
+
     lucide.createIcons();
     updateClock();
     setInterval(updateClock, 30000);
@@ -133,7 +180,8 @@ function updateClock() {
     const now = new Date();
     const str = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' • ' +
                 now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    document.getElementById('liveClock').textContent = str;
+    const clockEl = document.getElementById('liveClock');
+    if (clockEl) clockEl.textContent = str;
 }
 
 function syncMasterDriveButtons() {
@@ -479,7 +527,7 @@ function saveRoutineSlotChanges(e) {
 
     const newSlotObj = { code, teacher, type, kind, status, span, note };
     masterRoutine[day][pIdx] = newSlotObj;
-    localStorage.setItem('kuet_ese32_master_routine', JSON.stringify(masterRoutine));
+    saveLocal('kuet_ese32_master_routine', masterRoutine);
 
     if (kind === "regular") {
         for (let i = 0; i < span && (pIdx + i) < 9; i++) {
@@ -494,7 +542,7 @@ function saveRoutineSlotChanges(e) {
             span,
             note: ""
         };
-        localStorage.setItem('kuet_ese32_base_routine', JSON.stringify(baseRegularRoutine));
+        saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
     }
 
     const shouldNotify = document.getElementById('slotAutoNoticeCheck').checked;
@@ -535,12 +583,12 @@ function clearSlotCompletely() {
     masterRoutine[day][pIdx] = null;
     if (!existing || existing.kind === "regular") {
         baseRegularRoutine[day][pIdx] = null;
-        localStorage.setItem('kuet_ese32_base_routine', JSON.stringify(baseRegularRoutine));
+        saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
     } else if (existing && existing.kind === "extra" && baseRegularRoutine[day][pIdx]) {
         masterRoutine[day][pIdx] = { ...baseRegularRoutine[day][pIdx], status: "active", note: "" };
     }
 
-    localStorage.setItem('kuet_ese32_master_routine', JSON.stringify(masterRoutine));
+    saveLocal('kuet_ese32_master_routine', masterRoutine);
 
     if (existing && document.getElementById('slotAutoNoticeCheck').checked) {
         const pInfo = PERIOD_INFO[pIdx];
@@ -571,7 +619,7 @@ function quickToggleCancelSlot(day, periodIdx) {
         postAutomatedNotice(`${prefix} ${day} ${pInfo.label} (${pInfo.short}): ${slot.code} (${slot.teacher}) is CANCELED.${slot.note ? ' Note: ' + slot.note : ''}`, "canceled", true);
     }
 
-    localStorage.setItem('kuet_ese32_master_routine', JSON.stringify(masterRoutine));
+    saveLocal('kuet_ese32_master_routine', masterRoutine);
     renderMasterRoutineTable();
     renderDaySchedule(day);
 }
@@ -580,7 +628,7 @@ function quickToggleCancelSlot(day, periodIdx) {
 function postAutomatedNotice(text, type = "info", isWeeklyTemp = false) {
     const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     notices.unshift({ date: today, type, text, isWeeklyTemp });
-    localStorage.setItem('kuet_ese32_notices', JSON.stringify(notices));
+    saveLocal('kuet_ese32_notices', notices);
     renderNotices();
 }
 
@@ -621,7 +669,7 @@ function promptNewNotice() {
 function deleteNotice(idx) {
     if (!isAdmin) return;
     notices.splice(idx, 1);
-    localStorage.setItem('kuet_ese32_notices', JSON.stringify(notices));
+    saveLocal('kuet_ese32_notices', notices);
     renderNotices();
 }
 
@@ -653,7 +701,7 @@ function saveAllAdminDriveLinks() {
     if (!isAdmin) return;
     const newMaster = document.getElementById('adminMasterDriveInput').value.trim();
     masterDriveUrl = newMaster || 'https://drive.google.com';
-    localStorage.setItem('kuet_ese32_master_drive', masterDriveUrl);
+    saveLocal('kuet_ese32_master_drive', masterDriveUrl);
 
     document.querySelectorAll('[data-course-drive]').forEach(inp => {
         const code = inp.dataset.courseDrive;
@@ -665,7 +713,7 @@ function saveAllAdminDriveLinks() {
         }
     });
 
-    localStorage.setItem('kuet_ese32_course_drives', JSON.stringify(courseDriveLinks));
+    saveLocal('kuet_ese32_course_drives', courseDriveLinks);
     syncMasterDriveButtons();
     renderCourses();
     closeAdminDriveManager();
@@ -681,7 +729,7 @@ function promptSingleCourseDriveLink(courseCode) {
     } else {
         delete courseDriveLinks[courseCode];
     }
-    localStorage.setItem('kuet_ese32_course_drives', JSON.stringify(courseDriveLinks));
+    saveLocal('kuet_ese32_course_drives', courseDriveLinks);
     renderCourses();
     if (activeCourseModalCode === courseCode) {
         openCourseDetail(courseCode);
@@ -713,7 +761,7 @@ function updateAdminPin() {
     const val = document.getElementById('newAdminPinInput').value.trim();
     if (!val) return alert("Enter a new PIN first.");
     adminPin = val;
-    localStorage.setItem('kuet_ese32_pin', adminPin);
+    saveLocal('kuet_ese32_pin', adminPin);
     alert(`Admin PIN updated to: ${adminPin}`);
 }
 
@@ -731,27 +779,27 @@ function importConfigJson() {
         const parsed = JSON.parse(raw);
         if (parsed.masterDriveUrl) {
             masterDriveUrl = parsed.masterDriveUrl;
-            localStorage.setItem('kuet_ese32_master_drive', masterDriveUrl);
+            saveLocal('kuet_ese32_master_drive', masterDriveUrl);
         }
         if (parsed.courseDriveLinks) {
             courseDriveLinks = parsed.courseDriveLinks;
-            localStorage.setItem('kuet_ese32_course_drives', JSON.stringify(courseDriveLinks));
+            saveLocal('kuet_ese32_course_drives', courseDriveLinks);
         }
         if (parsed.baseRegularRoutine) {
             baseRegularRoutine = parsed.baseRegularRoutine;
-            localStorage.setItem('kuet_ese32_base_routine', JSON.stringify(baseRegularRoutine));
+            saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
         }
         if (parsed.masterRoutine) {
             masterRoutine = parsed.masterRoutine;
-            localStorage.setItem('kuet_ese32_master_routine', JSON.stringify(masterRoutine));
+            saveLocal('kuet_ese32_master_routine', masterRoutine);
         }
         if (Array.isArray(parsed.customResources)) {
             customResources = parsed.customResources;
-            localStorage.setItem('kuet_ese32_resources', JSON.stringify(customResources));
+            saveLocal('kuet_ese32_resources', customResources);
         }
         if (Array.isArray(parsed.notices)) {
             notices = parsed.notices;
-            localStorage.setItem('kuet_ese32_notices', JSON.stringify(notices));
+            saveLocal('kuet_ese32_notices', notices);
         }
         syncMasterDriveButtons();
         renderMasterRoutineTable();
@@ -921,7 +969,7 @@ function openCourseDetail(courseCode) {
 function deleteCustomResource(courseCode, title) {
     if (!isAdmin) return;
     customResources = customResources.filter(r => !(r.courseCode === courseCode && r.title === title));
-    localStorage.setItem('kuet_ese32_resources', JSON.stringify(customResources));
+    saveLocal('kuet_ese32_resources', customResources);
     renderCourses();
     openCourseDetail(courseCode);
 }
@@ -964,14 +1012,20 @@ function saveNewResource(e) {
     const url = document.getElementById('resUrl').value.trim();
 
     customResources.unshift({ courseCode, category, section, title, url, isCustom: true });
-    localStorage.setItem('kuet_ese32_resources', JSON.stringify(customResources));
+    saveLocal('kuet_ese32_resources', customResources);
     closeResourceModal();
     renderCourses();
     openCourseDetail(courseCode);
     e.target.reset();
 }
 
-// ================= CT & EXAM TRACKER =================
+// ================= CT & EXAM TRACKER (AUTO-SAVES PERSONAL MARKS ON EVERY KEYSTROKE) =================
+function getPersonalCTMark(courseCode, idx, fallbackMark) {
+    const key = `${courseCode}_${idx}`;
+    if (personalCTMarks[key] !== undefined) return personalCTMarks[key];
+    return fallbackMark || "";
+}
+
 function renderCTTracker() {
     const container = document.getElementById('ctTrackerContainer');
     const theoryCourses = COURSES.filter(c => c.type === 'Theory');
@@ -988,48 +1042,62 @@ function renderCTTracker() {
                     <span class="text-xs text-slate-500">Teachers: <strong>${course.teachers.join(' & ')}</strong></span>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${cts.length} gap-3">
-                    ${cts.map((ct, idx) => `
-                        <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/80 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <span class="font-mono font-bold text-xs">${ct.name} (${ct.teacher})</span>${isAdmin ? `
-                                    <select onchange="updateCTField('${course.code}', ${idx}, 'status', this.value)" class="text-[11px] font-semibold px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-                                        <option value="Upcoming" ${ct.status === 'Upcoming' ? 'selected' : ''}>Upcoming</option>
-                                        <option value="Done" ${ct.status === 'Done' ? 'selected' : ''}>Done</option>
-                                        <option value="Pending" ${ct.status === 'Pending' ? 'selected' : ''}>Pending</option>
-                                    </select>
-                                ` : `
-                                    <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">${ct.status}</span>
-                                `}
+                    ${cts.map((ct, idx) => {
+                        const savedMark = getPersonalCTMark(course.code, idx, ct.marks);
+                        return `
+                            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/80 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-mono font-bold text-xs">${ct.name} (${ct.teacher})</span>${isAdmin ? `
+                                        <select onchange="updateCTField('${course.code}', ${idx}, 'status', this.value)" class="text-[11px] font-semibold px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                                            <option value="Upcoming" ${ct.status === 'Upcoming' ? 'selected' : ''}>Upcoming</option>
+                                            <option value="Done" ${ct.status === 'Done' ? 'selected' : ''}>Done</option>
+                                            <option value="Pending" ${ct.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                        </select>
+                                    ` : `
+                                        <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">${ct.status}</span>
+                                    `}
+                                </div>
+                                <div>
+                                    <label class="text-[10px] uppercase font-mono text-slate-400">Syllabus / Topic</label>
+                                    ${isAdmin ? `
+                                        <input type="text" value="${ct.syllabus}" oninput="updateCTField('${course.code}', ${idx}, 'syllabus', this.value)" class="w-full mt-0.5 px-2 py-1 text-xs rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                                    ` : `
+                                        <div class="mt-0.5 text-xs font-medium text-slate-800 dark:text-slate-200">${ct.syllabus}</div>
+                                    `}
+                                </div>
+                                <div class="flex items-center justify-between pt-1">
+                                    <span class="text-[11px] text-slate-500">My Marks (/20):</span>
+                                    <input type="text" placeholder="-- / 20" value="${savedMark}" oninput="savePersonalCTMark('${course.code}',${idx}, this.value)" class="w-24 text-center font-mono text-xs px-2 py-1 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                </div>
                             </div>
-                            <div>
-                                <label class="text-[10px] uppercase font-mono text-slate-400">Syllabus / Topic</label>
-                                ${isAdmin ? `
-                                    <input type="text" value="${ct.syllabus}" onchange="updateCTField('${course.code}', ${idx}, 'syllabus', this.value)" class="w-full mt-0.5 px-2 py-1 text-xs rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
-                                ` : `
-                                    <div class="mt-0.5 text-xs font-medium text-slate-800 dark:text-slate-200">${ct.syllabus}</div>
-                                `}
-                            </div>
-                            <div class="flex items-center justify-between pt-1">
-                                <span class="text-[11px] text-slate-500">My Marks (/20):</span>
-                                <input type="text" placeholder="-- / 20" value="${ct.marks}" onchange="updateCTField('${course.code}',${idx}, 'marks', this.value)" class="w-20 text-center font-mono text-xs px-2 py-1 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-emerald-600 dark:text-emerald-400">
-                            </div>
-                        </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             </div>
         `;
     }).join('');
 }
 
+function savePersonalCTMark(courseCode, idx, value) {
+    const key = `${courseCode}_${idx}`;
+    personalCTMarks[key] = value;
+    saveLocal('kuet_ese32_personal_marks', personalCTMarks);
+
+    if (ctData[courseCode] && ctData[courseCode][idx]) {
+        ctData[courseCode][idx].marks = value;
+        saveLocal('kuet_ese32_cts', ctData);
+    }
+}
+
 function updateCTField(courseCode, idx, field, value) {
     ctData[courseCode][idx][field] = value;
-    localStorage.setItem('kuet_ese32_cts', JSON.stringify(ctData));
+    saveLocal('kuet_ese32_cts', ctData);
 }
 
 function resetCTData() {
     if (!isAdmin) return;
     ctData = getDefaultCTData();
-    localStorage.setItem('kuet_ese32_cts', JSON.stringify(ctData));
+    saveLocal('kuet_ese32_cts', ctData);
     renderCTTracker();
 }
 
@@ -1054,11 +1122,33 @@ function renderFaculty() {
 
 // ================= GENERAL & KUET CURRICULUM CGPA CALCULATOR =================
 function initGeneralCGPACalculator() {
+    // Restore student's saved previous term GPAs & direct CGPA inputs
+    PREVIOUS_TERM_CREDITS.forEach(t => {
+        const el = document.getElementById(t.id);
+        if (el && personalCGPAState.termGPAs && personalCGPAState.termGPAs[t.id] !== undefined) {
+            el.value = personalCGPAState.termGPAs[t.id];
+        }
+    });
+
+    const directCrEl = document.getElementById('prevCreditsInput');
+    const directCgEl = document.getElementById('prevCGPAInput');
+    if (directCrEl && personalCGPAState.directCredits !== undefined) directCrEl.value = personalCGPAState.directCredits;
+    if (directCgEl && personalCGPAState.directCGPA !== undefined) directCgEl.value = personalCGPAState.directCGPA;
+
+    const badge = document.getElementById('loadedPresetBadge');
+    if (badge && personalCGPAState.activePresetLabel) {
+        badge.textContent = personalCGPAState.activePresetLabel;
+    }
+
+    setPrevCalcMode(personalCGPAState.mode || 'terms');
     renderGeneralCalcRows();
 }
 
 function setPrevCalcMode(mode) {
     prevCalcMode = mode;
+    personalCGPAState.mode = mode;
+    saveLocal('kuet_ese32_personal_cgpa_state', personalCGPAState);
+
     const termsWrapper = document.getElementById('prevTermsGridWrapper');
     const directWrapper = document.getElementById('prevDirectWrapper');
     const termsBtn = document.getElementById('prevModeTermsBtn');
@@ -1082,7 +1172,9 @@ function clearPreviousTermsInputs() {
     PREVIOUS_TERM_CREDITS.forEach(t => {
         const el = document.getElementById(t.id);
         if (el) el.value = "";
+        if (personalCGPAState.termGPAs) personalCGPAState.termGPAs[t.id] = "";
     });
+    saveLocal('kuet_ese32_personal_cgpa_state', personalCGPAState);
     calculateGeneralCGPA();
 }
 
@@ -1090,6 +1182,9 @@ function loadSemesterPreset(termKey) {
     const preset = ESE_SEMESTER_PRESETS[termKey];
     if (!preset) return;
     generalCalcRows = JSON.parse(JSON.stringify(preset.courses));
+    personalCGPAState.activePresetLabel = preset.label;
+    saveLocal('kuet_ese32_personal_cgpa_state', personalCGPAState);
+
     const badge = document.getElementById('loadedPresetBadge');
     if (badge) badge.textContent = preset.label;
     saveGeneralRows();
@@ -1193,7 +1288,7 @@ function clearGeneralCalcRows() {
 }
 
 function saveGeneralRows() {
-    localStorage.setItem('kuet_general_cgpa_rows', JSON.stringify(generalCalcRows));
+    saveLocal('kuet_general_cgpa_rows', generalCalcRows);
 }
 
 function calculateGeneralCGPA() {
@@ -1218,9 +1313,12 @@ function calculateGeneralCGPA() {
     let prevCr = 0;
     let prevPoints = 0;
 
+    if (!personalCGPAState.termGPAs) personalCGPAState.termGPAs = {};
+
     if (prevCalcMode === 'terms') {
         PREVIOUS_TERM_CREDITS.forEach(t => {
             const rawVal = document.getElementById(t.id)?.value;
+            personalCGPAState.termGPAs[t.id] = rawVal !== undefined ? rawVal : "";
             if (rawVal !== undefined && rawVal !== "") {
                 const gpa = parseFloat(rawVal);
                 if (!isNaN(gpa) && gpa >= 0 && gpa <= 4) {
@@ -1235,10 +1333,18 @@ function calculateGeneralCGPA() {
             summaryEl.textContent = `Previous Completed: ${prevCr.toFixed(2)} Credits | Previous CGPA: ${prevCgpaCalc.toFixed(2)}`;
         }
     } else {
-        prevCr = parseFloat(document.getElementById('prevCreditsInput')?.value) || 0;
-        const prevCg = parseFloat(document.getElementById('prevCGPAInput')?.value) || 0;
+        const rawCr = document.getElementById('prevCreditsInput')?.value || "";
+        const rawCg = document.getElementById('prevCGPAInput')?.value || "";
+        personalCGPAState.directCredits = rawCr;
+        personalCGPAState.directCGPA = rawCg;
+
+        prevCr = parseFloat(rawCr) || 0;
+        const prevCg = parseFloat(rawCg) || 0;
         prevPoints = prevCr * prevCg;
     }
+
+    // Persist student's previous term GPA inputs
+    saveLocal('kuet_ese32_personal_cgpa_state', personalCGPAState);
 
     document.getElementById('calcPrevCreditsStat').textContent = prevCr.toFixed(2);
 
@@ -1250,9 +1356,19 @@ function calculateGeneralCGPA() {
     document.getElementById('calculatedTotalCreditsText').textContent = `Total Combined Credits: ${totalCredits.toFixed(2)}`;
 }
 
-// ================= DARK MODE =================
+// ================= PERSISTENT DARK / LIGHT MODE PER USER =================
+function applySavedTheme() {
+    const savedTheme = localStorage.getItem('kuet_ese32_theme');
+    if (savedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+    } else if (savedTheme === 'light') {
+        document.documentElement.classList.remove('dark');
+    }
+}
+
 function toggleTheme() {
-    document.documentElement.classList.toggle('dark');
+    const isNowDark = document.documentElement.classList.toggle('dark');
+    saveLocal('kuet_ese32_theme', isNowDark ? 'dark' : 'light');
 }
 
 window.addEventListener('DOMContentLoaded', initPortal);
