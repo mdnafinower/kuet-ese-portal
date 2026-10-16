@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KUET ESE 3-2 (2K22 Batch) | Academic & Drive Portal</title>
+    
+    <!-- Tailwind CSS CDN & Config -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts & Lucide Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Custom External Stylesheet -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-white transition-colors duration-200">
+
+    <!-- Top Announcement Bar -->
+    <div class="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-emerald-100 text-xs py-2 px-4 border-b border-emerald-800/50">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-semibold border border-emerald-500/30">KUET ESE 2K22</span>
+                <span><strong>Room:</strong> ESE-506 (Block-D, Academic Building 1)</span>
+                <span class="hidden md:inline text-emerald-400">•</span>
+                <span id="weekCycleBadge" class="hidden md:inline-flex items-center gap-1 text-[11px] font-mono text-emerald-300">
+                    <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+                    <span>Weekly Auto-Clean: Removes Extra Classes & Restores Canceled Regulars</span>
+                </span>
+            </div>
+            <div class="flex items-center gap-3 font-mono text-[11px]">
+                <a id="topMasterDriveBtn" href="#" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-200 border border-emerald-400/30 font-semibold transition">
+                    <i data-lucide="folder-git-2" class="w-3.5 h-3.5"></i>
+                    <span>Master 3-2 Drive</span>
+                </a>
+                <span id="liveClock" class="hidden sm:inline">Loading time...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Active Control Banner (Strictly hidden in Viewer Mode) -->
+    <div id="adminControlBanner" class="hidden bg-amber-500/15 dark:bg-amber-500/10 border-b border-amber-500/30 px-4 py-2.5 text-xs">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-semibold">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                <span>Admin Mode Active — Any Regular Class edit becomes the new permanent default. Extra classes & cancellations clear weekly.</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="openRoutineSlotModal('Sunday', 0)" class="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold shadow-sm transition flex items-center gap-1.5">
+                    <i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i>
+                    + Add Extra Class
+                </button>
+                <button onclick="manualWeeklyRefresh()" class="px-3 py-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-bold shadow-sm transition flex items-center gap-1.5" title="Remove Extra Classes & make Canceled Regular Classes Active">
+                    <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>
+                    Weekly Refresh Now
+                </button>
+                <button onclick="openAdminDriveManager()" class="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold shadow-sm transition flex items-center gap-1.5">
+                    <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>
+                    Customize Drive Links
+                </button>
+                <button onclick="openResourceModal()" class="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm transition flex items-center gap-1.5">
+                    <i data-lucide="file-plus" class="w-3.5 h-3.5"></i>
+                    + Add Material
+                </button>
+                <button onclick="openCloudSyncModal()" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold transition flex items-center gap-1.5">
+                    <i data-lucide="cloud-cog" class="w-3.5 h-3.5"></i>
+                    Export / Sync
+                </button>
+                <button onclick="logoutAdmin()" class="px-2.5 py-1 rounded-lg border border-amber-600/40 text-amber-800 dark:text-amber-300 hover:bg-amber-500/20 font-semibold">
+                    Exit Admin
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Navigation -->
+    <header class="sticky top-0 z-40 glass-nav border-b border-slate-200/80 dark:border-slate-800/80">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-extrabold shadow-lg shadow-emerald-500/20">
+                    <i data-lucide="zap" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-extrabold text-base sm:text-lg tracking-tight">ESE 3-2 Hub</h1>
+                        <span class="text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">2K22 Batch</span>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">Dept. of Energy Science & Engineering • KUET</p>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <nav class="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                <button onclick="switchTab('dashboard')" data-tab="dashboard" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm">
+                    Routine & Dashboard
+                </button>
+                <button onclick="switchTab('courses')" data-tab="courses" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900">
+                    Study Materials (Drive)
+                </button>
+                <button onclick="switchTab('ct-tracker')" data-tab="ct-tracker" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900">
+                    CT Tracker
+                </button>
+                <button onclick="switchTab('faculty')" data-tab="faculty" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900">
+                    Faculty (10)
+                </button>
+                <button onclick="switchTab('sgpa')" data-tab="sgpa" class="tab-btn px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900">
+                    CGPA Calculator
+                </button>
+            </nav>
+
+            <!-- Right Actions -->
+            <div class="flex items-center gap-2">
+                <button id="adminToggleBtn" onclick="handleAdminToggle()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-amber-500"></i>
+                    <span id="adminBtnText">Admin</span>
+                </button>
+
+                <button onclick="toggleTheme()" class="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition" title="Toggle Dark Mode">
+                    <i data-lucide="moon" class="w-4 h-4 dark:hidden"></i>
+                    <i data-lucide="sun" class="w-4 h-4 hidden dark:block text-amber-400"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Navigation Bar -->
+        <div class="flex md:hidden overflow-x-auto custom-scrollbar px-4 py-2 gap-1.5 border-t border-slate-200/60 dark:border-slate-800/60">
+            <button onclick="switchTab('dashboard')" data-tab="dashboard" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm">Routine</button>
+            <button onclick="switchTab('courses')" data-tab="courses" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400">Materials (Drive)</button>
+            <button onclick="switchTab('ct-tracker')" data-tab="ct-tracker" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400">CT Tracker</button>
+            <button onclick="switchTab('faculty')" data-tab="faculty" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400">Teachers</button>
+            <button onclick="switchTab('sgpa')" data-tab="sgpa" class="tab-btn shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400">CGPA Calc</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+
+        <!-- ================= TAB 1: DASHBOARD & DYNAMIC ROUTINE ================= -->
+        <section id="tab-dashboard" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <!-- Left 2 Columns: Today's Schedule Snapshot -->
+                <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[11px] font-mono uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold">Live Weekly Schedule</span>
+                                    <span id="currentWeekRangeLabel" class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-500 dark:text-slate-400"></span>
+                                </div>
+                                <h2 class="text-lg font-extrabold flex items-center gap-2 mt-0.5">
+                                    <span id="selectedDayTitle">Sunday's Classes</span>
+                                    <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(Room ESE-506)</span>
+                                </h2>
+                            </div>
+                            <!-- Day Selector Pills -->
+                            <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl" id="dayPills">
+                                <button onclick="renderDaySchedule('Sunday')" data-day="Sunday" class="day-pill px-2.5 py-1 rounded-lg text-xs font-bold transition">Sun</button>
+                                <button onclick="renderDaySchedule('Monday')" data-day="Monday" class="day-pill px-2.5 py-1 rounded-lg text-xs font-bold transition">Mon</button>
+                                <button onclick="renderDaySchedule('Tuesday')" data-day="Tuesday" class="day-pill px-2.5 py-1 rounded-lg text-xs font-bold transition">Tue</button>
+                                <button onclick="renderDaySchedule('Wednesday')" data-day="Wednesday" class="day-pill px-2.5 py-1 rounded-lg text-xs font-bold transition">Wed</button>
+                                <button onclick="renderDaySchedule('Thursday')" data-day="Thursday" class="day-pill px-2.5 py-1 rounded-lg text-xs font-bold transition">Thu</button>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Day Cards -->
+                        <div id="dayScheduleContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                    </div>
+
+                    <!-- Legend & Admin-Only Quick Trigger -->
+                    <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-2">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Regular Theory</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Regular Lab</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> Extra Class (This Week)</span>
+                            <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Canceled (This Week)</span>
+                        </div>
+                        <button onclick="openRoutineSlotModal(currentSelectedDay, 0)" class="admin-only hidden text-purple-600 dark:text-purple-400 font-bold hover:underline flex items-center gap-1">
+                            <i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i>
+                            <span>Edit Routine / Add Extra Class</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Column: Notice Board -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-bold text-sm flex items-center gap-2">
+                                <i data-lucide="bell-ring" class="w-4 h-4 text-amber-500"></i>
+                                Notice Board & Class Alerts
+                            </h3>
+                            <button onclick="promptNewNotice()" class="admin-only hidden text-xs px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 font-bold">+ Post Notice</button>
+                        </div>
+                        <div id="noticeList" class="space-y-2.5 max-h-60 overflow-y-auto custom-scrollbar pr-1"></div>
+                    </div>
+
+                    <!-- Master Google Drive Banner inside Dashboard -->
+                    <div class="mt-4 p-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex items-center justify-between gap-3">
+                        <div>
+                            <div class="text-[10px] font-mono uppercase text-emerald-100 font-bold">Central Cloud Storage</div>
+                            <div class="font-extrabold text-sm">ESE 3-2 Master Google Drive</div>
+                        </div>
+                        <a id="dashboardMasterDriveBtn" href="#" target="_blank" class="px-3 py-1.5 rounded-lg bg-white text-emerald-700 font-bold text-xs shadow hover:bg-emerald-50 transition shrink-0 flex items-center gap-1">
+                            <span>Open Drive</span>
+                            <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Full Weekly Master Routine Table -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden">
+                <div class="p-5 border-b border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h3 class="font-extrabold text-base flex items-center gap-2">
+                                <i data-lucide="calendar-days" class="w-5 h-5 text-emerald-500"></i>
+                                Master Class Routine — 3rd Year 2nd Term (2K22 Batch)
+                            </h3>
+                            <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-bold">Edited Regulars Saved as Default</span>
+                        </div>
+                        <p id="routineTableSubtext" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            Click any course in the routine to open its Google Drive folder and study materials.
+                        </p>
+                    </div>
+                    <div class="admin-only hidden flex flex-wrap items-center gap-2 text-xs">
+                        <button onclick="manualWeeklyRefresh()" class="px-3 py-1.5 rounded-xl bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30 hover:bg-teal-500/25 font-bold flex items-center gap-1">
+                            <i data-lucide="refresh-ccw" class="w-3.5 h-3.5"></i>
+                            Clear Extra Classes & Activate Canceled
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse routine-grid min-w-[1040px]">
+                        <thead>
+                            <tr class="bg-slate-100/90 dark:bg-slate-800/80 text-[11px] font-mono uppercase text-slate-600 dark:text-slate-300 text-center">
+                                <th class="py-3 px-3 w-28 text-left">Day / Time</th>
+                                <th class="py-3 px-2">1st Period<br><span class="text-[10px] font-normal text-slate-500">08:00 - 08:50</span></th>
+                                <th class="py-3 px-2">2nd Period<br><span class="text-[10px] font-normal text-slate-500">08:50 - 09:40</span></th>
+                                <th class="py-3 px-2">3rd Period<br><span class="text-[10px] font-normal text-slate-500">09:40 - 10:30</span></th>
+                                <th class="py-3 px-1.5 w-10 bg-amber-50/70 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300">Break<br><span class="text-[9px]">10:30-10:40</span></th>
+                                <th class="py-3 px-2">4th Period<br><span class="text-[10px] font-normal text-slate-500">10:40 - 11:30</span></th>
+                                <th class="py-3 px-2">5th Period<br><span class="text-[10px] font-normal text-slate-500">11:30 - 12:20</span></th>
+                                <th class="py-3 px-2">6th Period<br><span class="text-[10px] font-normal text-slate-500">12:20 - 01:10</span></th>
+                                <th class="py-3 px-1.5 w-12 bg-amber-50/70 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300">Prayer & Lunch<br><span class="text-[9px]">01:10-02:30</span></th>
+                                <th class="py-3 px-2">7th Period<br><span class="text-[10px] font-normal text-slate-500">02:30 - 03:20</span></th>
+                                <th class="py-3 px-2">8th Period<br><span class="text-[10px] font-normal text-slate-500">03:20 - 04:10</span></th>
+                                <th class="py-3 px-2">9th Period<br><span class="text-[10px] font-normal text-slate-500">04:10 - 05:00</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="masterRoutineTbody" class="text-xs text-center divide-y divide-slate-200 dark:divide-slate-800">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 2: STUDY MATERIALS & DRIVE VAULT ================= -->
+        <section id="tab-courses" class="hidden space-y-6">
+            <div class="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white p-6 rounded-2xl shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-mono font-bold">
+                        <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>
+                        GOOGLE DRIVE REPOSITORY
+                    </div>
+                    <h2 class="text-xl font-extrabold">ESE 3-2 Study Materials & Course Drive Folders</h2>
+                    <p class="text-xs text-emerald-100/80 max-w-2xl">Click <strong>"Open Google Drive"</strong> on any course card to go directly to that course's Google Drive folder, or click <strong>"View All Files / Embed"</strong> to browse specific Chothas, slides, and embedded Drive folders inside the portal.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <a id="materialsMasterDriveBtn" href="#" target="_blank" class="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-lg transition flex items-center gap-2">
+                        <i data-lucide="folder-symlink" class="w-4 h-4"></i>
+                        Open Master 3-2 Drive Folder
+                    </a>
+                    <button onclick="openAdminDriveManager()" class="admin-only hidden px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition flex items-center gap-1.5">
+                        <i data-lucide="settings" class="w-4 h-4"></i>
+                        Edit Drive Links (Admin)
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="relative">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+                        <input id="courseSearchInput" oninput="renderCourses()" type="text" placeholder="Search course code, title, teacher..." class="pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-64">
+                    </div>
+                    <select id="courseTypeFilter" onchange="renderCourses()" class="px-3 py-1.5 text-xs rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold">
+                        <option value="ALL">All 12 Courses (20.50 Cr)</option>
+                        <option value="Theory">Theory Courses (5)</option>
+                        <option value="Sessional">Sessionals & Labs (7)</option>
+                    </select>
+                </div>
+                <button onclick="openAdminDriveManager()" class="admin-only hidden text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1">
+                    <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                    <span>Admin: Customize Course Drive Links</span>
+                </button>
+            </div>
+
+            <div id="coursesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+        </section>
+
+        <!-- ================= TAB 3: CT & EXAM TRACKER ================= -->
+        <section id="tab-ct-tracker" class="hidden space-y-6">
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-extrabold flex items-center gap-2">
+                        <i data-lucide="check-square" class="w-5 h-5 text-emerald-500"></i>
+                        Class Test (CT) & Assessment Tracker
+                    </h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">View upcoming CT dates, syllabus, and enter your personal marks across all 5 theory courses.</p>
+                </div>
+                <button onclick="resetCTData()" class="admin-only hidden text-xs px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">Reset Default CTs</button>
+            </div>
+
+            <div id="ctTrackerContainer" class="space-y-4"></div>
+        </section>
+
+        <!-- ================= TAB 4: FACULTY DIRECTORY ================= -->
+        <section id="tab-faculty" class="hidden space-y-6">
+            <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-extrabold">ESE 3-2 Course Teachers Directory</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Official faculty members teaching 3rd Year 2nd Term (2K22 Batch) + Head of Department.</p>
+                </div>
+                <span class="px-3 py-1 rounded-full text-xs font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold">Dept. of Energy Science & Engineering, KUET</span>
+            </div>
+
+            <div id="facultyGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </section>
+
+        <!-- ================= TAB 5: GENERAL & KUET ESE CURRICULUM CGPA CALCULATOR ================= -->
+        <section id="tab-sgpa" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Left 2 Columns: Previous Semesters + Active Course Calculator -->
+                <div class="lg:col-span-2 space-y-5">
+
+                    <!-- Previous Semesters' Record (1-1 to 3-1 Official Credits OR Custom Input) -->
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <span class="text-[11px] font-mono uppercase text-emerald-600 dark:text-emerald-400 font-bold">Previous Academic Record (1-1 to 3-1 = 100.50 Credits)</span>
+                                <h3 class="text-base font-extrabold">Previous Semesters' GPA / CGPA</h3>
+                            </div>
+                            <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
+                                <button onclick="setPrevCalcMode('terms')" id="prevModeTermsBtn" class="px-2.5 py-1 rounded-lg font-bold bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm transition">By Term (1-1 to 3-1)</button>
+                                <button onclick="setPrevCalcMode('direct')" id="prevModeDirectBtn" class="px-2.5 py-1 rounded-lg font-bold text-slate-500 transition">Direct CGPA</button>
+                            </div>
+                        </div>
+
+                        <!-- Mode A: Term-by-Term GPA Inputs -->
+                        <div id="prevTermsGridWrapper" class="space-y-3">
+                            <p class="text-xs text-slate-500 dark:text-slate-400">Enter your completed Term GPAs below (leave any term blank if you don't want to include it in overall CGPA):</p>
+                            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
+                                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">1-1</span>
+                                        <span class="text-[10px] font-mono text-slate-400">20.50 Cr</span>
+                                    </div>
+                                    <input id="termGpa_1_1" type="number" step="0.01" min="0" max="4" placeholder="GPA" oninput="calculateGeneralCGPA()" class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-center">
+                                </div>
+                                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">1-2</span>
+                                        <span class="text-[10px] font-mono text-slate-400">20.75 Cr</span>
+                                    </div>
+                                    <input id="termGpa_1_2" type="number" step="0.01" min="0" max="4" placeholder="GPA" oninput="calculateGeneralCGPA()" class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-center">
+                                </div>
+                                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">2-1</span>
+                                        <span class="text-[10px] font-mono text-slate-400">19.75 Cr</span>
+                                    </div>
+                                    <input id="termGpa_2_1" type="number" step="0.01" min="0" max="4" placeholder="GPA" oninput="calculateGeneralCGPA()" class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-center">
+                                </div>
+                                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">2-2</span>
+                                        <span class="text-[10px] font-mono text-slate-400">19.00 Cr</span>
+                                    </div>
+                                    <input id="termGpa_2_2" type="number" step="0.01" min="0" max="4" placeholder="GPA" oninput="calculateGeneralCGPA()" class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-center">
+                                </div>
+                                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800 col-span-2 sm:col-span-1">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <span class="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">3-1</span>
+                                        <span class="text-[10px] font-mono text-slate-400">20.50 Cr</span>
+                                    </div>
+                                    <input id="termGpa_3_1" type="number" step="0.01" min="0" max="4" placeholder="GPA" oninput="calculateGeneralCGPA()" class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-center">
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1">
+                                <span id="prevTermsSummaryText" class="font-mono">Previous Completed: 0.00 Credits | Previous CGPA: 0.00</span>
+                                <button onclick="clearPreviousTermsInputs()" class="text-rose-500 hover:underline font-semibold">Clear Previous Terms</button>
+                            </div>
+                        </div>
+
+                        <!-- Mode B: Direct Previous Credits & Previous CGPA Input -->
+                        <div id="prevDirectWrapper" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                            <div>
+                                <label class="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Previous Completed Credits (e.g. 100.50 up to 3-1)</label>
+                                <input id="prevCreditsInput" type="number" step="0.25" min="0" placeholder="e.g. 100.50" oninput="calculateGeneralCGPA()" class="w-full px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-slate-600 dark:text-slate-300 mb-1">Previous CGPA (Out of 4.00)</label>
+                                <input id="prevCGPAInput" type="number" step="0.01" min="0" max="4" placeholder="e.g. 3.37" oninput="calculateGeneralCGPA()" class="w-full px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Course Rows & Semester Preset Loader Card -->
+                    <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                            <div>
+                                <h2 class="text-lg font-extrabold">Course-by-Course GPA Calculator</h2>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">Load any official KUET ESE semester preset (1-1 to 3-2) or add custom courses below.</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button onclick="addGeneralCourseRow()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5">
+                                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                    <span>Add Course</span>
+                                </button>
+                                <button onclick="clearGeneralCalcRows()" class="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition">
+                                    Clear List
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 1-Click Official KUET ESE Term Preset Bar (1-1 to 3-2) -->
+                        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <span class="font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                                <i data-lucide="layers" class="w-4 h-4 text-emerald-500"></i>
+                                Load Official ESE Term Courses:
+                            </span>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <button onclick="loadSemesterPreset('1-1')" class="term-preset-btn px-2.5 py-1 rounded-lg font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 transition">1-1 (20.5 Cr)</button>
+                                <button onclick="loadSemesterPreset('1-2')" class="term-preset-btn px-2.5 py-1 rounded-lg font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 transition">1-2 (20.75 Cr)</button>
+                                <button onclick="loadSemesterPreset('2-1')" class="term-preset-btn px-2.5 py-1 rounded-lg font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 transition">2-1 (19.75 Cr)</button>
+                                <button onclick="loadSemesterPreset('2-2')" class="term-preset-btn px-2.5 py-1 rounded-lg font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 transition">2-2 (19.0 Cr)</button>
+                                <button onclick="loadSemesterPreset('3-1')" class="term-preset-btn px-2.5 py-1 rounded-lg font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 transition">3-1 (20.5 Cr)</button>
+                                <button onclick="loadSemesterPreset('3-2')" class="term-preset-btn px-2.5 py-1 rounded-lg font-mono font-bold bg-emerald-600 text-white shadow-sm hover:bg-emerald-500 transition">3-2 (20.5 Cr)</button>
+                            </div>
+                        </div>
+
+                        <!-- Table Header -->
+                        <div class="hidden sm:grid sm:grid-cols-12 gap-3 text-[11px] font-mono uppercase text-slate-400 px-2">
+                            <div class="col-span-5">Course No. & Title</div>
+                            <div class="col-span-2 text-center">Credit</div>
+                            <div class="col-span-2">Letter Grade</div>
+                            <div class="col-span-2 text-center">Grade Point</div>
+                            <div class="col-span-1 text-right">Remove</div>
+                        </div>
+
+                        <!-- Dynamic Course Rows -->
+                        <div id="generalCalcRowsContainer" class="space-y-2.5"></div>
+
+                        <div class="pt-2">
+                            <button onclick="addGeneralCourseRow()" class="w-full py-2.5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-emerald-500 text-xs font-bold text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition flex items-center justify-center gap-1.5">
+                                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                                <span>+ Add Custom Course Row</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Live SGPA & Overall CGPA Result Card -->
+                <div class="bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white p-6 rounded-2xl shadow-lg flex flex-col justify-between h-fit sticky top-24">
+                    <div>
+                        <span id="loadedPresetBadge" class="text-xs font-mono uppercase tracking-widest text-emerald-300">Live Grade Summary</span>
+                        <h3 class="text-xl font-extrabold mt-1">Term GPA & Overall CGPA</h3>
+
+                        <div class="mt-6 text-center py-5 px-4 rounded-2xl bg-white/10 backdrop-blur border border-white/15">
+                            <div class="text-xs uppercase font-mono text-emerald-200">Term GPA (Active Course List)</div>
+                            <div id="calculatedSGPA" class="text-4xl font-extrabold font-mono tracking-tight mt-1 text-emerald-300">4.00</div>
+                            <div id="calculatedCreditsText" class="text-xs text-emerald-100 mt-1.5">20.50 Credits Counted</div>
+                        </div>
+
+                        <div class="mt-4 text-center py-5 px-4 rounded-2xl bg-emerald-500/20 backdrop-blur border border-emerald-400/30">
+                            <div class="text-xs uppercase font-mono text-emerald-200">Overall Cumulative CGPA</div>
+                            <div id="calculatedOverallCGPA" class="text-4xl font-extrabold font-mono tracking-tight mt-1 text-white">4.00</div>
+                            <div id="calculatedTotalCreditsText" class="text-xs text-emerald-100 mt-1.5">Total Credits: 20.50</div>
+                        </div>
+
+                        <div class="mt-6 space-y-2 text-xs text-emerald-100/90">
+                            <div class="flex justify-between"><span>Courses in Active List:</span><span id="calcCourseCount" class="font-mono font-bold">0</span></div>
+                            <div class="flex justify-between"><span>Term Grade Points:</span><span id="calcTotalPoints" class="font-mono font-bold">0.00</span></div>
+                            <div class="flex justify-between"><span>Previous Credits Included:</span><span id="calcPrevCreditsStat" class="font-mono font-bold">0.00</span></div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-emerald-200/70 mt-6 pt-4 border-t border-white/10">KUET Grading Scale: A+ (4.00), A (3.75), A- (3.50), B+ (3.25), B (3.00), B- (2.75), C+ (2.50), C (2.25), D (2.00), F (0.00).</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ================= MODAL 0: ADMIN ROUTINE SLOT & EXTRA CLASS EDITOR ================= -->
+    <div id="routineSlotModal" class="fixed inset-0 z-50 hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-4 text-xs">
+            <div class="flex items-start justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <div>
+                    <span class="px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-mono text-[10px] font-bold uppercase">Admin Routine Manager</span>
+                    <h3 class="font-extrabold text-base mt-1">Manage Class Slot, Extra Class or Cancellation</h3>
+                </div>
+                <button onclick="closeRoutineSlotModal()" class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+
+            <form onsubmit="saveRoutineSlotChanges(event)" class="space-y-3.5">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Day of Week</label>
+                        <select id="slotDaySelect" onchange="loadSlotIntoModal()" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold">
+                            <option value="Sunday">Sunday</option>
+                            <option value="Monday">Monday</option>
+                            <option value="Tuesday">Tuesday</option>
+                            <option value="Wednesday">Wednesday</option>
+                            <option value="Thursday">Thursday</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Period / Time Slot</label>
+                        <select id="slotPeriodSelect" onchange="loadSlotIntoModal()" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold">
+                            <option value="0">1st Period (08:00 - 08:50)</option>
+                            <option value="1">2nd Period (08:50 - 09:40)</option>
+                            <option value="2">3rd Period (09:40 - 10:30)</option>
+                            <option value="3">4th Period (10:40 - 11:30)</option>
+                            <option value="4">5th Period (11:30 - 12:20)</option>
+                            <option value="5">6th Period (12:20 - 01:10)</option>
+                            <option value="6">7th Period / Afternoon Lab (02:30+)</option>
+                            <option value="7">8th Period (03:20 - 04:10)</option>
+                            <option value="8">9th Period (04:10 - 05:00)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="col-span-2">
+                        <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Course Code</label>
+                        <select id="slotCourseSelect" onchange="autoFillSlotCourseDefaults()" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold">
+                            <option value="EMPTY">— Empty / Free Period —</option>
+                            <option value="ESE 3203">ESE 3203 — Petroleum & Gas Processing</option>
+                            <option value="ESE 3207">ESE 3207 — Solar Photovoltaic Systems</option>
+                            <option value="ESE 3211">ESE 3211 — Coal Power Generation</option>
+                            <option value="ESE 3217">ESE 3217 — Instrumentation & Control</option>
+                            <option value="ESE 3221">ESE 3221 — Energy Storage Systems</option>
+                            <option value="ESE 3200">ESE 3200 — Seminar on Special Topics</option>
+                            <option value="ESE 3202">ESE 3202 — Energy Innovation Lab</option>
+                            <option value="ESE 3204">ESE 3204 — Petroleum & Gas Lab</option>
+                            <option value="ESE 3208">ESE 3208 — Solar PV Lab</option>
+                            <option value="ESE 3218">ESE 3218 — Instrumentation Lab</option>
+                            <option value="ESE 3222">ESE 3222 — Energy Storage Lab</option>
+                            <option value="ESE 3204 / ESE 3218">ESE 3204 / ESE 3218 — Combined Lab</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Duration (Periods)</label>
+                        <select id="slotSpanSelect" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold">
+                            <option value="1">1 Period (50m)</option>
+                            <option value="2">2 Periods</option>
+                            <option value="3">3 Periods (Lab)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Teacher Initials / Room</label>
+                        <input id="slotTeacherInput" type="text" placeholder="e.g. MSH or MHA (ESE-506)" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1 text-slate-700 dark:text-slate-300">Class Category (Theme)</label>
+                        <select id="slotKindSelect" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold">
+                            <option value="regular">Regular Routine Class (Saved as Default)</option>
+                            <option value="extra">Extra Class (Purple - Removed Next Week)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                    <label class="block font-extrabold text-slate-800 dark:text-slate-100">Class Status for This Week</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="cursor-pointer flex items-center gap-2 p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold">
+                            <input type="radio" name="slotStatusRadio" value="active" checked class="accent-emerald-600">
+                            <span>Active / Scheduled</span>
+                        </label>
+                        <label class="cursor-pointer flex items-center gap-2 p-2.5 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300 font-bold">
+                            <input type="radio" name="slotStatusRadio" value="canceled" class="accent-rose-600">
+                            <span>CANCELED (Restores Next Week)</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="block font-semibold mb-1 text-slate-500">Note / Reason (e.g., "Professor busy", "Rescheduled", "Room changed")</label>
+                        <input id="slotNoteInput" type="text" placeholder="Optional note shown on card & in Notice Board..." class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                    </div>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-800 dark:text-emerald-300 text-[11px]">
+                    <strong>How Weekly Refresh Works:</strong> Any edit to a <strong>Regular Routine Class</strong> is automatically saved as your permanent default. Only <strong>Extra Classes</strong> are removed and <strong>Canceled Classes</strong> become active again when a new week starts.
+                </div>
+
+                <label class="flex items-center gap-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 font-semibold cursor-pointer">
+                    <input id="slotAutoNoticeCheck" type="checkbox" checked class="w-4 h-4 accent-amber-600 rounded">
+                    <span>Automatically post this update/cancellation to the Notice Board</span>
+                </label>
+
+                <div class="pt-2 flex items-center justify-between gap-2">
+                    <button type="button" onclick="clearSlotCompletely()" class="px-3 py-2 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold">
+                        Remove Slot Permanently
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="closeRoutineSlotModal()" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold">Cancel</button>
+                        <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow">Save Slot & Notify</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 1: COURSE DRIVE VAULT & LIVE EMBED ================= -->
+    <div id="courseDetailModal" class="fixed inset-0 z-50 hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-3xl w-full max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span id="modalCourseCode" class="px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"></span>
+                        <span id="modalCourseCredit" class="text-xs font-mono text-slate-500"></span>
+                    </div>
+                    <h3 id="modalCourseTitle" class="text-lg font-extrabold mt-1"></h3>
+                    <p id="modalCourseTeachers" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5"></p>
+                </div>
+                <button onclick="closeCourseDetail()" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="px-5 py-3 bg-emerald-50/80 dark:bg-emerald-950/40 border-b border-emerald-200/60 dark:border-emerald-800/60 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2 text-xs">
+                    <i data-lucide="folder-open" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>
+                    <span class="font-semibold text-slate-700 dark:text-slate-200">Dedicated Course Google Drive Folder:</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a id="modalPrimaryDriveBtn" href="#" target="_blank" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5">
+                        <span>Open in Google Drive</span>
+                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                    </a>
+                    <button onclick="promptSingleCourseDriveLink(activeCourseModalCode)" class="admin-only hidden px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:border-amber-500 transition flex items-center gap-1">
+                        <i data-lucide="edit-2" class="w-3 h-3 text-amber-500"></i>
+                        <span>Set Drive Link</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-5 overflow-y-auto custom-scrollbar space-y-5">
+                <div id="modalDriveEmbedSection" class="hidden space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold uppercase font-mono text-slate-500">Live Google Drive Folder Preview</span>
+                        <span class="text-[11px] text-slate-400">Updates automatically when files are added to Drive</span>
+                    </div>
+                    <iframe id="modalDriveIframe" src="" class="w-full h-64 rounded-xl border border-slate-200 dark:border-slate-800 bg-white"></iframe>
+                </div>
+
+                <div class="space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold uppercase font-mono text-slate-500">Pinned Study Materials & Chothas</span>
+                        <button onclick="openResourceModalFromCourse()" class="admin-only hidden text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline">+ Add Specific File Link</button>
+                    </div>
+                    <div id="modalCourseBody" class="space-y-2.5"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 2: ADMIN DRIVE LINKS CUSTOMIZER ================= -->
+    <div id="adminDriveModal" class="fixed inset-0 z-50 hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-3xl w-full max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div>
+                    <span class="text-[11px] font-mono uppercase text-amber-500 font-bold">Admin Control Panel</span>
+                    <h3 class="text-lg font-extrabold">Customize Google Drive Folder Links</h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Paste your Google Drive folder URLs below. When students click "Materials", they will go straight to your Drive folders.</p>
+                </div>
+                <button onclick="closeAdminDriveManager()" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-5 overflow-y-auto custom-scrollbar space-y-4 text-xs">
+                <div class="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70 space-y-2">
+                    <label class="font-extrabold text-sm text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                        <i data-lucide="folder-git-2" class="w-4 h-4"></i>
+                        Master ESE 3-2 Google Drive Folder Link (All Courses)
+                    </label>
+                    <input id="adminMasterDriveInput" type="url" placeholder="https://drive.google.com/drive/folders/..." class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-xs">
+                </div>
+
+                <div class="space-y-2.5" id="adminCourseDriveInputs"></div>
+            </div>
+
+            <div class="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-wrap items-center justify-between gap-2">
+                <button onclick="openCloudSyncModal()" class="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1">
+                    <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+                    Export Config for Whole Batch
+                </button>
+                <div class="flex items-center gap-2">
+                    <button onclick="closeAdminDriveManager()" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">Cancel</button>
+                    <button onclick="saveAllAdminDriveLinks()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow">Save All Drive Links</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 3: ADD SPECIFIC STUDY MATERIAL ================= -->
+    <div id="addResourceModal" class="fixed inset-0 z-50 hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-extrabold text-base">Add Study Material / Drive Link</h3>
+                <button onclick="closeResourceModal()" class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <form onsubmit="saveNewResource(event)" class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold mb-1">Select Course</label>
+                    <select id="resCourseCode" required class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"></select>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-semibold mb-1">Material Category</label>
+                        <select id="resCategory" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                            <option value="Google Drive Folder">Google Drive Folder</option>
+                            <option value="Lecture Slides">Lecture Slides</option>
+                            <option value="Chotha / Handnotes">Chotha / Handnotes</option>
+                            <option value="Reference Book PDF">Reference Book PDF</option>
+                            <option value="Term Question Bank">Term Question Bank</option>
+                            <option value="Lab Manual / Report">Lab Manual / Report</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold mb-1">Section / Teacher</label>
+                        <input id="resSection" type="text" placeholder="e.g. Sec A (MSH)" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1">Resource Title</label>
+                    <input id="resTitle" type="text" required placeholder="e.g. Natural Gas Dehydration Slides (Week 1-3)" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1">Google Drive / File Link (URL)</label>
+                    <input id="resUrl" type="url" required placeholder="https://drive.google.com/..." class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                </div>
+                <div class="pt-2 flex justify-end gap-2">
+                    <button type="button" onclick="closeResourceModal()" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-500">Save Resource</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 4: CLOUD SYNC / EXPORT FOR BATCH ================= -->
+    <div id="cloudSyncModal" class="fixed inset-0 z-50 hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-4 text-xs">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="text-[10px] font-mono uppercase text-emerald-500 font-bold">Admin Batch Sync Tool</span>
+                    <h3 class="font-extrabold text-base">Share Routine Changes & Drive Links with Batch</h3>
+                </div>
+                <button onclick="closeCloudSyncModal()" class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 space-y-2">
+                <div class="font-bold text-slate-800 dark:text-slate-100">Option 1: Change Admin PIN</div>
+                <div class="flex gap-2">
+                    <input id="newAdminPinInput" type="text" placeholder="Current default PIN: 2022" class="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono">
+                    <button onclick="updateAdminPin()" class="px-3 py-1.5 rounded-lg bg-slate-800 dark:bg-slate-700 text-white font-semibold">Save PIN</button>
+                </div>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 space-y-2">
+                <div class="font-bold text-slate-800 dark:text-slate-100">Option 2: Export / Import All Customizations (JSON)</div>
+                <p class="text-slate-500 dark:text-slate-400">Includes your edited default routine, current week status, Drive links, and notices.</p>
+                <textarea id="configJsonBox" rows="4" class="w-full p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-[10px]"></textarea>
+                <div class="flex gap-2">
+                    <button onclick="copyConfigJson()" class="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Copy Config JSON</button>
+                    <button onclick="importConfigJson()" class="flex-1 py-2 rounded-lg border border-slate-300 dark:border-slate-700 font-bold hover:bg-slate-200 dark:hover:bg-slate-700">Import JSON</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-200/80 dark:border-slate-800/80 mt-12 py-6 text-xs text-slate-500 dark:text-slate-400">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div><strong>KUET ESE 3-2 Academic Portal</strong> • 2K22 Batch • Room ESE-506 (Block-D, Academic Building 1)</div>
+            <div>Routine Approved by <strong>Prof. Dr. Md. Shahidul Islam</strong> (Head, Dept. of ESE, KUET)</div>
+        </div>
+    </footer>
+
+    <!-- External JavaScript Modules (Data loaded first, then App Logic) -->
+    <script src="js/data.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
