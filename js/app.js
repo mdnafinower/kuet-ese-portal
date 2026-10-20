@@ -1,12 +1,14 @@
 /* ==========================================================================
-   KUET ESE 3-2 Portal — Crash-Proof Main Application Logic (js/app.js)
-   Includes built-in data fallbacks so the routine NEVER renders blank!
+   KUET ESE 3-2 Portal — Complete Application Logic (js/app.js)
    ========================================================================== */
 
-// 🔴 PASTE YOUR FIREBASE REALTIME DATABASE URL INSIDE THE QUOTES BELOW FOR LIVE SYNC:
+// ==========================================================================
+// 🔴 PASTE YOUR FIREBASE REALTIME DATABASE URL INSIDE THE QUOTES BELOW!
+// Example: const DEFAULT_FIREBASE_DB_URL = "https://kuet-ese32-default-rtdb.firebaseio.com";
+// ==========================================================================
 const DEFAULT_FIREBASE_DB_URL = ""; 
 
-// ================= BUILT-IN FALLBACK DATA (PREVENTS BLANK PAGE IF data.js FAILS) =================
+// ================= BUILT-IN FALLBACK DATA (IF data.js IS DELAYED) =================
 if (typeof PERIOD_INFO === 'undefined') {
     window.PERIOD_INFO = [
         { index: 0, label: "1st Period", time: "08:00 AM - 08:50 AM", short: "08:00 - 08:50" },
@@ -18,135 +20,6 @@ if (typeof PERIOD_INFO === 'undefined') {
         { index: 6, label: "7th Period", time: "02:30 PM - 03:20 PM", short: "02:30 - 03:20", labTime: "02:30 PM - 05:00 PM" },
         { index: 7, label: "8th Period", time: "03:20 PM - 04:10 PM", short: "03:20 - 04:10" },
         { index: 8, label: "9th Period", time: "04:10 PM - 05:00 PM", short: "04:10 - 05:00" }
-    ];
-}
-
-if (typeof FACULTY === 'undefined') {
-    window.FACULTY = {
-        "MAI":  { code: "MAI",  name: "Dr. Mohammad Ariful Islam", role: "Professor / Course Teacher", courses: ["ESE 3221"] },
-        "MHA":  { code: "MHA",  name: "Dr. Md. Hasan Ali", role: "Faculty Member", courses: ["ESE 3211"] },
-        "MSH":  { code: "MSH",  name: "Dr. Md. Shameem Hossain", role: "Faculty Member", courses: ["ESE 3203", "ESE 3204"] },
-        "MMA":  { code: "MMA",  name: "Md. Mahmodul Alam", role: "Faculty Member", courses: ["ESE 3211", "ESE 3222"] },
-        "AA":   { code: "AA",   name: "Adnan Abedeen", role: "Faculty Member", courses: ["ESE 3203", "ESE 3204"] },
-        "MR":   { code: "MR",   name: "Mostafizur Rahaman", role: "Faculty Member", courses: ["ESE 3217", "ESE 3218"] },
-        "KS":   { code: "KS",   name: "Khaza Shahriar", role: "Faculty Member", courses: ["ESE 3217", "ESE 3218"] },
-        "GSF":  { code: "GSF",  name: "Golam Sharoar Fahim", role: "Faculty Member", courses: ["ESE 3221", "ESE 3222"] },
-        "NL":   { code: "NL",   name: "Nafisa Lubaba", role: "Faculty Member", courses: ["ESE 3207", "ESE 3208"] },
-        "NAP":  { code: "NAP",  name: "Nahyan Ahnaf Pratik", role: "Faculty Member", courses: ["ESE 3207", "ESE 3208"] },
-        "HEAD": { code: "HEAD", name: "Prof. Dr. Md. Shahidul Islam", role: "Head of the Department (ESE)", courses: ["Department Head"] }
-    };
-}
-
-if (typeof COURSES === 'undefined') {
-    window.COURSES = [
-        { code: "ESE 3203", title: "Petroleum and Natural Gas Processing", credit: 3.00, type: "Theory", teachers: ["MSH", "AA"], schedule: "Sun (09:40), Mon (11:30), Tue (09:40)", materials: [] },
-        { code: "ESE 3207", title: "Solar Photovoltaic Systems", credit: 3.00, type: "Theory", teachers: ["NL", "NAP"], schedule: "Sun (12:20), Mon (12:20), Wed (10:40)", materials: [] },
-        { code: "ESE 3211", title: "Coal Power Generation", credit: 4.00, type: "Theory", teachers: ["MHA", "MMA"], schedule: "Sun (11:30), Tue (11:30), Wed (12:20), Thu (12:20)", materials: [] },
-        { code: "ESE 3217", title: "Instrumentation and Control", credit: 3.00, type: "Theory", teachers: ["MR", "KS"], schedule: "Mon (09:40), Tue (08:50), Wed (11:30)", materials: [] },
-        { code: "ESE 3221", title: "Energy Storage Systems", credit: 3.00, type: "Theory", teachers: ["MAI", "GSF"], schedule: "Sun (10:40), Mon (10:40), Tue (10:40)", materials: [] },
-        { code: "ESE 3200", title: "Seminar on Special Topics", credit: 0.75, type: "Sessional", teachers: ["All Faculty"], schedule: "Department Scheduled Slot", materials: [] },
-        { code: "ESE 3202", title: "Energy Innovation Lab", credit: 0.75, type: "Sessional", teachers: ["ESE Faculty"], schedule: "Thursday (02:30 PM - 05:00 PM)", materials: [] },
-        { code: "ESE 3204", title: "Sessional on ESE 3203 (Petroleum & Gas Lab)", credit: 0.75, type: "Sessional", teachers: ["MSH", "AA"], schedule: "Wednesday (02:30 PM - 05:00 PM)", materials: [] },
-        { code: "ESE 3208", title: "Sessional on ESE 3207 (Solar PV Lab)", credit: 0.75, type: "Sessional", teachers: ["NL", "NAP"], schedule: "Monday (02:30 PM - 05:00 PM)", materials: [] },
-        { code: "ESE 3218", title: "Sessional on ESE 3217 (Instrumentation Lab)", credit: 0.75, type: "Sessional", teachers: ["MR", "KS"], schedule: "Wednesday (02:30 PM - 05:00 PM)", materials: [] },
-        { code: "ESE 3222", title: "Sessional on ESE 3221 (Energy Storage Lab)", credit: 0.75, type: "Sessional", teachers: ["MMA", "GSF"], schedule: "Tuesday (02:30 PM - 05:00 PM)", materials: [] },
-        { code: "ESE 3250", title: "Industrial Attachment", credit: 0.00, type: "Sessional", teachers: ["Industrial Training Committee"], schedule: "End of Term", materials: [] }
-    ];
-}
-
-if (typeof getInitialSeedRoutine === 'undefined') {
-    window.getInitialSeedRoutine = function() {
-        return {
-            "Sunday": [
-                null, null,
-                { code: "ESE 3203", teacher: "MSH", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3221", teacher: "MAI", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3211", teacher: "MHA", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3207", teacher: "NL",  type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                null, null, null
-            ],
-            "Monday": [
-                null, null,
-                { code: "ESE 3217", teacher: "MR", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3221", teacher: "MAI / GSF", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3203", teacher: "AA", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3207", teacher: "NAP", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3208", teacher: "NL + NAP", type: "Sessional", kind: "regular", status: "active", span: 3, note: "" },
-                null, null
-            ],
-            "Tuesday": [
-                null,
-                { code: "ESE 3217", teacher: "KS", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3203", teacher: "MSH / AA", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3221", teacher: "GSF", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3211", teacher: "MHA", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                null,
-                { code: "ESE 3222", teacher: "MMA + GSF", type: "Sessional", kind: "regular", status: "active", span: 3, note: "" },
-                null, null
-            ],
-            "Wednesday": [
-                null, null, null,
-                { code: "ESE 3207", teacher: "NL / NAP", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3217", teacher: "MR / KS", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3211", teacher: "MMA", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3204 / ESE 3218", teacher: "MSH+AA / MR+KS", type: "Sessional", kind: "regular", status: "active", span: 3, note: "" },
-                null, null
-            ],
-            "Thursday": [
-                null, null, null, null, null,
-                { code: "ESE 3211", teacher: "MMA", type: "Theory", kind: "regular", status: "active", span: 1, note: "" },
-                { code: "ESE 3202", teacher: "ESE Faculty", type: "Sessional", kind: "regular", status: "active", span: 3, note: "" },
-                null, null
-            ]
-        };
-    };
-}
-
-if (typeof getDefaultCTData === 'undefined') {
-    window.getDefaultCTData = function() {
-        return {
-            "ESE 3203": [{ name: "CT-1", teacher: "MSH", status: "Upcoming", syllabus: "Natural Gas Properties", marks: "" }, { name: "CT-2", teacher: "AA", status: "Upcoming", syllabus: "Crude Oil Fractionation", marks: "" }, { name: "CT-3", teacher: "MSH / AA", status: "Pending", syllabus: "Gas Dehydration", marks: "" }],
-            "ESE 3207": [{ name: "CT-1", teacher: "NL", status: "Upcoming", syllabus: "Solar Radiation & P-N Junction", marks: "" }, { name: "CT-2", teacher: "NAP", status: "Upcoming", syllabus: "PV Sizing", marks: "" }, { name: "CT-3", teacher: "NL / NAP", status: "Pending", syllabus: "MPPT & Grid", marks: "" }],
-            "ESE 3211": [{ name: "CT-1", teacher: "MHA", status: "Upcoming", syllabus: "Coal Analysis", marks: "" }, { name: "CT-2", teacher: "MMA", status: "Upcoming", syllabus: "Steam Generators", marks: "" }, { name: "CT-3", teacher: "MHA", status: "Pending", syllabus: "Ash Handling", marks: "" }, { name: "CT-4 (4 Cr)", teacher: "MMA", status: "Pending", syllabus: "Clean Coal Tech", marks: "" }],
-            "ESE 3217": [{ name: "CT-1", teacher: "MR", status: "Upcoming", syllabus: "Transfer Functions", marks: "" }, { name: "CT-2", teacher: "KS", status: "Upcoming", syllabus: "Sensors & Error", marks: "" }, { name: "CT-3", teacher: "MR / KS", status: "Pending", syllabus: "PID Control", marks: "" }],
-            "ESE 3221": [{ name: "CT-1", teacher: "MAI", status: "Upcoming", syllabus: "Thermal Storage", marks: "" }, { name: "CT-2", teacher: "GSF", status: "Upcoming", syllabus: "Battery Kinetics", marks: "" }, { name: "CT-3", teacher: "MAI / GSF", status: "Pending", syllabus: "Pumped Hydro & H2", marks: "" }]
-        };
-    };
-}
-
-if (typeof ESE_SEMESTER_PRESETS === 'undefined') {
-    window.ESE_SEMESTER_PRESETS = {
-        "1-1": { label: "1st Year 1st Term (1-1) — 20.50 Credits", courses: [{ name: "Ch 1113 — Chemistry I", credit: 3.00, gp: 4.00 }, { name: "Ch 1114 — Sessional on Ch 1113", credit: 0.75, gp: 4.00 }, { name: "ESE 1100 — Engineering Drawing I", credit: 1.50, gp: 4.00 }, { name: "ESE 1101 — Fundamentals of Energy Resources", credit: 3.00, gp: 4.00 }, { name: "ESE 1102 — Sessional on ESE 1101", credit: 0.75, gp: 4.00 }, { name: "HUM 1000 — History of Bengali Language (Non-Credit)", credit: 0.00, gp: 0.00 }, { name: "Hum 1113 — Sociology and Behavioural Science", credit: 3.00, gp: 4.00 }, { name: "Math 1113 — Differential and Integral Calculus", credit: 3.00, gp: 4.00 }, { name: "MES 1114 — Workshop Practice", credit: 0.75, gp: 4.00 }, { name: "Ph 1113 — Physics", credit: 4.00, gp: 4.00 }, { name: "Ph 1114 — Sessional on Ph 1113", credit: 0.75, gp: 4.00 }] },
-        "1-2": { label: "1st Year 2nd Term (1-2) — 20.75 Credits", courses: [{ name: "Ch 1213 — Chemistry II", credit: 3.00, gp: 4.00 }, { name: "EE 1213 — Electrical Circuits and Electronics", credit: 4.00, gp: 4.00 }, { name: "EE 1214 — Sessional on EE 1213", credit: 0.75, gp: 4.00 }, { name: "ESE 1200 — Engineering Drawing II", credit: 1.50, gp: 4.00 }, { name: "ESE 1205 — Thermodynamics for Energy Engineering", credit: 4.00, gp: 4.00 }, { name: "ESE 1206 — Sessional on ESE 1205", credit: 0.75, gp: 4.00 }, { name: "Hum 1213 — Technical English", credit: 3.00, gp: 4.00 }, { name: "Hum 1214 — Sessional on Hum 1213", credit: 0.75, gp: 4.00 }, { name: "Math 1213 — Differential Equation and Co-ordinate Geometry", credit: 3.00, gp: 4.00 }] },
-        "2-1": { label: "2nd Year 1st Term (2-1) — 19.75 Credits", courses: [{ name: "CSE 2113 — Computer Programming", credit: 3.00, gp: 4.00 }, { name: "CSE 2114 — Sessional on CSE 2113", credit: 1.50, gp: 4.00 }, { name: "EE 2113 — Electrical Machines", credit: 3.00, gp: 4.00 }, { name: "EE 2114 — Sessional on EE 2113", credit: 0.75, gp: 4.00 }, { name: "Math 2113 — Linear Algebra and Vector Analysis", credit: 4.00, gp: 4.00 }, { name: "ME 2113 — Statics and Solid Mechanics", credit: 3.00, gp: 4.00 }, { name: "ME 2114 — Sessional on ME 2113", credit: 0.75, gp: 4.00 }, { name: "ME 2115 — Fluid Mechanics", credit: 3.00, gp: 4.00 }, { name: "ME 2116 — Sessional on ME 2115", credit: 0.75, gp: 4.00 }] },
-        "2-2": { label: "2nd Year 2nd Term (2-2) — 19.00 Credits", courses: [{ name: "EE 2213 — Power Electronics", credit: 4.00, gp: 4.00 }, { name: "EE 2214 — Sessional on EE 2213", credit: 0.75, gp: 4.00 }, { name: "ESE 2209 — Bio and Wind Energy Engineering", credit: 3.00, gp: 4.00 }, { name: "ESE 2210 — Sessional on ESE 2209", credit: 0.75, gp: 4.00 }, { name: "ESE 2230 — Energy Engineering Simulation I", credit: 0.75, gp: 4.00 }, { name: "Hum 2213 — Economics and Accounting", credit: 3.00, gp: 4.00 }, { name: "Math 2213 — Complex Variables and Fourier Analysis", credit: 3.00, gp: 4.00 }, { name: "ME 2213 — Dynamics and Kinematics of Machineries", credit: 3.00, gp: 4.00 }, { name: "ME 2214 — Sessional on ME 2213", credit: 0.75, gp: 4.00 }] },
-        "3-1": { label: "3rd Year 1st Term (3-1) — 20.50 Credits", courses: [{ name: "Math 3114 — Sessional on Math 3113", credit: 1.50, gp: 4.00 }, { name: "EE 3113 — Power System Engineering", credit: 3.00, gp: 4.00 }, { name: "EE 3114 — Sessional on EE 3113", credit: 0.75, gp: 4.00 }, { name: "ESE 3105 — Heat and Mass Transfer", credit: 4.00, gp: 4.00 }, { name: "ESE 3106 — Sessional on ESE 3105", credit: 0.75, gp: 4.00 }, { name: "ESE 3107 — Solar Thermal Engineering", credit: 3.00, gp: 4.00 }, { name: "ESE 3108 — Sessional on ESE 3107", credit: 0.75, gp: 4.00 }, { name: "ESE 3123 — Thermo-Fluid Devices", credit: 3.00, gp: 4.00 }, { name: "ESE 3124 — Sessional on ESE 3123", credit: 0.75, gp: 4.00 }, { name: "Math 3113 — Statistics and Numerical Methods", credit: 3.00, gp: 4.00 }] },
-        "3-2": { label: "3rd Year 2nd Term (3-2) — 20.50 Credits", courses: [{ name: "ESE 3200 — Seminar on Special Topics", credit: 0.75, gp: 4.00 }, { name: "ESE 3202 — Energy Innovation Lab", credit: 0.75, gp: 4.00 }, { name: "ESE 3203 — Petroleum and Natural Gas Processing", credit: 3.00, gp: 4.00 }, { name: "ESE 3204 — Sessional on ESE 3203", credit: 0.75, gp: 4.00 }, { name: "ESE 3207 — Solar Photovoltaic Systems", credit: 3.00, gp: 4.00 }, { name: "ESE 3208 — Sessional on ESE 3207", credit: 0.75, gp: 4.00 }, { name: "ESE 3211 — Coal Power Generation", credit: 4.00, gp: 4.00 }, { name: "ESE 3217 — Instrumentation and Control", credit: 3.00, gp: 4.00 }, { name: "ESE 3218 — Sessional on ESE 3217", credit: 0.75, gp: 4.00 }, { name: "ESE 3221 — Energy Storage Systems", credit: 3.00, gp: 4.00 }, { name: "ESE 3222 — Sessional on ESE 3221", credit: 0.75, gp: 4.00 }, { name: "ESE 3250 — Industrial Attachment (Non-Credit)", credit: 0.00, gp: 0.00 }] }
-    };
-}
-
-if (typeof PREVIOUS_TERM_CREDITS === 'undefined') {
-    window.PREVIOUS_TERM_CREDITS = [
-        { id: "termGpa_1_1", label: "1-1", credit: 20.50 },
-        { id: "termGpa_1_2", label: "1-2", credit: 20.75 },
-        { id: "termGpa_2_1", label: "2-1", credit: 19.75 },
-        { id: "termGpa_2_2", label: "2-2", credit: 19.00 },
-        { id: "termGpa_3_1", label: "3-1", credit: 20.50 }
-    ];
-}
-
-if (typeof GRADE_OPTIONS === 'undefined') {
-    window.GRADE_OPTIONS = [
-        { label: "A+ (4.00)", val: 4.00 },
-        { label: "A  (3.75)", val: 3.75 },
-        { label: "A- (3.50)", val: 3.50 },
-        { label: "B+ (3.25)", val: 3.25 },
-        { label: "B  (3.00)", val: 3.00 },
-        { label: "B- (2.75)", val: 2.75 },
-        { label: "C+ (2.50)", val: 2.50 },
-        { label: "C  (2.25)", val: 2.25 },
-        { label: "D  (2.00)", val: 2.00 },
-        { label: "F  (0.00)", val: 0.00 }
     ];
 }
 
@@ -175,7 +48,10 @@ let firebaseDbUrl = (localStorage.getItem('kuet_ese32_firebase_url') || DEFAULT_
 let lastSeenNoticeId = localStorage.getItem('kuet_ese32_last_notice_id') || '';
 
 async function pushStateToCloud() {
-    if (!firebaseDbUrl) return;
+    if (!firebaseDbUrl) {
+        updateCloudStatusIndicator(false);
+        return;
+    }
     const payload = {
         updatedAt: Date.now(),
         masterDriveUrl,
@@ -188,12 +64,12 @@ async function pushStateToCloud() {
     };
 
     try {
-        await fetch(`${firebaseDbUrl}/portal_state.json`, {
+        const res = await fetch(`${firebaseDbUrl}/portal_state.json`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        updateCloudStatusIndicator(true);
+        updateCloudStatusIndicator(res.ok);
     } catch (err) {
         console.warn('Cloud push failed:', err);
         updateCloudStatusIndicator(false);
@@ -207,7 +83,7 @@ async function pullStateFromCloud(isInitialLoad = false) {
     }
 
     try {
-        const res = await fetch(`${firebaseDbUrl}/portal_state.json?t=${Date.now()}`);
+        const res = await fetch(`${firebaseDbUrl}/portal_state.json?t=${Date.now()}`, { cache: 'no-store' });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const cloudData = await res.json();
         updateCloudStatusIndicator(true);
@@ -285,6 +161,10 @@ function updateCloudStatusIndicator(connected) {
     if (!badge) return;
     if (firebaseDbUrl && connected) {
         badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block mr-1"></span><span>Live Cloud Sync Active</span>`;
+    } else if (!firebaseDbUrl) {
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 inline-block mr-1"></span><span>Local Mode (Set Firebase URL in Admin Sync)</span>`;
+    } else {
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400 inline-block mr-1"></span><span>Cloud Sync Error (Check Firebase Rules)</span>`;
     }
 }
 
@@ -514,7 +394,7 @@ function initPortal() {
     populateResourceCourseDropdown();
 
     pullStateFromCloud(true);
-    setInterval(() => pullStateFromCloud(false), 8000);
+    setInterval(() => pullStateFromCloud(false), 6000);
 }
 
 function updateClock() {
@@ -666,7 +546,7 @@ function renderMasterRoutineTable() {
                 cellsHtml += `
                     <td class="p-1.5">
                         ${isAdmin
-                            ? `<button onclick="openRoutineSlotModal('${day}', ${p})" class="w-full py-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-purple-500 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 transition text-[11px] font-mono flex flex-col items-center justify-center gap-0.5">
+                            ? `<button onclick="openRoutineSlotModal('${day}',${p})" class="w-full py-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-purple-500 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 transition text-[11px] font-mono flex flex-col items-center justify-center gap-0.5">
                                 <span>+ Slot</span>
                                </button>`
                             : `<span class="text-slate-300 dark:text-slate-700 select-none">—</span>`
@@ -779,7 +659,7 @@ function renderDaySchedule(day) {
                             <button onclick="quickToggleCancelSlot('${day}', ${periodIdx})" class="font-bold ${isCanceled ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} hover:underline">
                                 ${isCanceled ? 'Make Active' : 'Cancel Class'}
                             </button>
-                            <button onclick="openRoutineSlotModal('${day}', ${periodIdx})" class="text-slate-500 hover:text-slate-900 dark:hover:text-white font-semibold">
+                            <button onclick="openRoutineSlotModal('${day}',${periodIdx})" class="text-slate-500 hover:text-slate-900 dark:hover:text-white font-semibold">
                                 Edit
                             </button>
                         </div>
@@ -1087,6 +967,9 @@ function promptSingleCourseDriveLink(courseCode) {
 // ================= CLOUD SYNC / EXPORT JSON MODAL =================
 function openCloudSyncModal() {
     if (!isAdmin) return;
+    const fbInput = document.getElementById('firebaseUrlInput');
+    if (fbInput) fbInput.value = firebaseDbUrl;
+
     const exportPayload = {
         firebaseDbUrl,
         masterDriveUrl,
@@ -1097,21 +980,17 @@ function openCloudSyncModal() {
         notices
     };
     document.getElementById('configJsonBox').value = JSON.stringify(exportPayload, null, 2);
-
-    const newFbUrl = prompt(
-        "☁️ LIVE CLOUD SYNC SETUP (Firebase Realtime Database URL):\n\n" +
-        "Paste your Firebase Realtime Database URL (e.g. https://your-project-default-rtdb.firebaseio.com) so notices & routine edits sync live:",
-        firebaseDbUrl
-    );
-    if (newFbUrl !== null && newFbUrl.trim() !== firebaseDbUrl) {
-        firebaseDbUrl = newFbUrl.trim().replace(/\/$/, '');
-        localStorage.setItem('kuet_ese32_firebase_url', firebaseDbUrl);
-        pushStateToCloud();
-        alert("✅ Firebase Database URL connected! Don't forget to also paste this URL into DEFAULT_FIREBASE_DB_URL (Line 7 of js/app.js) on GitHub so all students' phones connect automatically!");
-    }
-
     document.getElementById('cloudSyncModal').classList.remove('hidden');
     if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function saveFirebaseUrlFromModal() {
+    if (!isAdmin) return;
+    const val = (document.getElementById('firebaseUrlInput')?.value || '').trim().replace(/\/$/, '');
+    firebaseDbUrl = val;
+    localStorage.setItem('kuet_ese32_firebase_url', firebaseDbUrl);
+    pushStateToCloud();
+    alert("✅ Firebase Database URL saved and synced! Remember to also paste this URL into DEFAULT_FIREBASE_DB_URL on Line 12 of js/app.js on GitHub so all students' phones connect automatically.");
 }
 
 function closeCloudSyncModal() {
@@ -1797,7 +1676,6 @@ window.addEventListener('appinstalled', () => {
     if (btn) btn.classList.add('hidden');
 });
 
-// Run initPortal whether DOMContentLoaded has already fired or not
 if (document.readyState === 'loading') {
     window.addEventListener('DOMContentLoaded', initPortal);
 } else {
