@@ -1,43 +1,27 @@
 /* ==========================================================================
-   KUET ESE 3-2 Portal — Main Application Logic with Firebase Realtime Sync
+   KUET ESE 3-2 Portal — Complete Application Logic (js/app.js)
+   Features:
+   1. Real-Time Cloud Sync via Firebase Realtime Database REST + SDK
+   2. Automatic Mobile Notifications on Incoming Notices / Canceled Classes
+   3. Persistent Individual Student Storage (Dark Mode, CT Marks, CGPA)
+   4. Friday 12:00 AM Automatic Weekly Routine Refresh
    ========================================================================== */
 
-// ================= FIREBASE CONFIG & INITIALIZATION =================
-// 1. Create a free project at https://console.firebase.google.com/
-// 2. Enable Realtime Database (Test Mode) and paste your config details below:
-const firebaseConfig = {
-    apiKey: "YOUR_FIREBASE_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-};
+// ==========================================================================
+// 🔴 STEP FOR ADMIN: PASTE YOUR FIREBASE REALTIME DATABASE URL BELOW!
+// How to get it in 60 seconds (Free):
+// 1. Go to https://console.firebase.google.com/ -> Create Project
+// 2. Click "Build" -> "Realtime Database" -> "Create Database" -> "Start in Test Mode"
+// 3. Copy the URL (looks like: https://kuet-ese-32-default-rtdb.firebaseio.com) and paste below:
+// ==========================================================================
+const DEFAULT_FIREBASE_DB_URL = ""; // <-- PASTE YOUR URL INSIDE THESE QUOTES
 
-// Initialize Firebase if config is filled, otherwise fallback seamlessly to localStorage
-let isFirebaseConnected = false;
-let db = null;
-try {
-    if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_FIREBASE_API_KEY") {
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.database();
-        isFirebaseConnected = true;
-    }
-} catch (e) {
-    console.warn("Firebase initialization skipped, running local-first mode.", e);
-}
-
-// ================= SAFE STORAGE & CLOUD SYNC HELPERS =================
-function saveSync(key, value) {
+// ================= SAFE LOCAL STORAGE HELPERS =================
+function saveLocal(key, value) {
     try {
         localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-        if (isFirebaseConnected && db) {
-            // Push changes instantly to Firebase Cloud Database so everyone sees it live
-            db.ref(`portal_state/${key}`).set(value);
-        }
     } catch (e) {
-        console.warn('Storage sync error:', e);
+        console.warn('Local storage error:', e);
     }
 }
 
@@ -51,40 +35,233 @@ function loadLocal(key, fallback) {
     }
 }
 
-// Listen for live updates from Firebase Cloud for all clients
-function initCloudRealtimeSync() {
-    if (!isFirebaseConnected || !db) return;
+// ================= CLOUD DATABASE SYNC ENGINE (WORKS WITH JUST THE DB URL!) =================
+let firebaseDbUrl = (localStorage.getItem('kuet_ese32_firebase_url') || DEFAULT_FIREBASE_DB_URL || '').trim().replace(/\/$/, '');
+let isCloudConnected = false;
+let lastSeenNoticeId = localStorage.getItem('kuet_ese32_last_notice_id') || '';
 
-    db.ref('portal_state').on('value', (snapshot) => {
-        const cloudData = snapshot.val();
-        if (!cloudData) return;
+// Push shared batch data (Routine, Notices, Drive Links, CT Syllabus) to Firebase
+async function pushStateToCloud() {
+    if (!firebaseDbUrl) return;
+    const payload = {
+        updatedAt: Date.now(),
+        masterDriveUrl,
+        courseDriveLinks,
+        baseRegularRoutine,
+        masterRoutine,
+        customResources,
+        notices,
+        ctSyllabus: extractCTSyllabusOnly()
+    };
 
-        let needsUIRefresh = false;
-
-        if (cloudData.kuet_ese32_master_routine) {
-            masterRoutine = cloudData.kuet_ese32_master_routine;
-            localStorage.setItem('kuet_ese32_master_routine', JSON.stringify(masterRoutine));
-            needsUIRefresh = true;
-        }
-        if (cloudData.kuet_ese32_notices) {
-            notices = cloudData.kuet_ese32_notices;
-            localStorage.setItem('kuet_ese32_notices', JSON.stringify(notices));
-            renderNotices();
-        }
-        if (cloudData.kuet_ese32_course_drives) {
-            courseDriveLinks = cloudData.kuet_ese32_course_drives;
-            localStorage.setItem('kuet_ese32_course_drives', JSON.stringify(courseDriveLinks));
-            renderCourses();
-        }
-
-        if (needsUIRefresh) {
-            renderMasterRoutineTable();
-            renderDaySchedule(currentSelectedDay);
-        }
-    });
+    try {
+        await fetch(`${firebaseDbUrl}/portal_state.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        updateCloudStatusIndicator(true);
+    } catch (err) {
+        console.warn('Cloud push failed:', err);
+        updateCloudStatusIndicator(false);
+    }
 }
 
-// ================= WEEKLY AUTO-REFRESH ENGINE (FRIDAY 12:00 AM) =================
+// Pull latest batch data from Firebase & trigger mobile notification if a new notice arrived
+async function pullStateFromCloud(isInitialLoad = false) {
+    if (!firebaseDbUrl) {
+        updateCloudStatusIndicator(false);
+        return;
+    }
+
+    try {
+        const res = await fetch(`${firebaseDbUrl}/portal_state.json?t=${Date.now()}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const cloudData = await res.json();
+        updateCloudStatusIndicator(true);
+
+        if (!cloudData) {
+            // If cloud database is empty, seed it with current local state
+            await pushStateToCloud();
+            return;
+        }
+
+        let uiNeedsUpdate = false;
+
+        if (cloudData.masterDriveUrl && cloudData.masterDriveUrl !== masterDriveUrl) {
+            masterDriveUrl = cloudData.masterDriveUrl;
+            saveLocal('kuet_ese32_master_drive', masterDriveUrl);
+            syncMasterDriveButtons();
+        }
+
+        if (cloudData.courseDriveLinks) {
+            courseDriveLinks = cloudData.courseDriveLinks;
+            saveLocal('kuet_ese32_course_drives', courseDriveLinks);
+            uiNeedsUpdate = true;
+        }
+
+        if (cloudData.baseRegularRoutine) {
+            baseRegularRoutine = cloudData.baseRegularRoutine;
+            saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
+        }
+
+        if (cloudData.masterRoutine) {
+            masterRoutine = cloudData.masterRoutine;
+            saveLocal('kuet_ese32_master_routine', masterRoutine);
+            uiNeedsUpdate = true;
+        }
+
+        if (Array.isArray(cloudData.customResources)) {
+            customResources = cloudData.customResources;
+            saveLocal('kuet_ese32_resources', customResources);
+            uiNeedsUpdate = true;
+        }
+
+        if (cloudData.ctSyllabus) {
+            mergeCloudCTSyllabus(cloudData.ctSyllabus);
+            renderCTTracker();
+        }
+
+        // Check if a brand-new Notice arrived!
+        if (Array.isArray(cloudData.notices) && cloudData.notices.length > 0) {
+            const newestNotice = cloudData.notices[0];
+            const newestId = newestNotice.id || newestNotice.text;
+
+            // If we already loaded before and a new notice ID appeared, fire a mobile notification!
+            if (lastSeenNoticeId && newestId !== lastSeenNoticeId && !isInitialLoad) {
+                triggerIncomingNoticeNotification(newestNotice);
+            }
+
+            lastSeenNoticeId = newestId;
+            localStorage.setItem('kuet_ese32_last_notice_id', newestId);
+
+            notices = cloudData.notices;
+            saveLocal('kuet_ese32_notices', notices);
+            renderNotices();
+        }
+
+        if (uiNeedsUpdate) {
+            renderMasterRoutineTable();
+            renderDaySchedule(currentSelectedDay);
+            renderCourses();
+        }
+    } catch (err) {
+        console.warn('Cloud pull error:', err);
+        updateCloudStatusIndicator(false);
+    }
+}
+
+function updateCloudStatusIndicator(connected) {
+    isCloudConnected = connected;
+    const badge = document.getElementById('weekCycleBadge');
+    if (!badge) return;
+    if (firebaseDbUrl && connected) {
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block mr-1"></span><span>Live Cloud Sync Active (Auto-Updates)</span>`;
+    } else if (!firebaseDbUrl) {
+        badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 inline-block mr-1"></span><span>Offline Mode (Connect Firebase URL in Admin Sync)</span>`;
+    }
+}
+
+// Separate CT Syllabus from personal marks so syncing CT topics never overwrites a student's marks
+function extractCTSyllabusOnly() {
+    const clean = {};
+    Object.keys(ctData).forEach(code => {
+        clean[code] = ctData[code].map(ct => ({
+            name: ct.name,
+            teacher: ct.teacher,
+            status: ct.status,
+            syllabus: ct.syllabus
+        }));
+    });
+    return clean;
+}
+
+function mergeCloudCTSyllabus(cloudSyllabus) {
+    Object.keys(cloudSyllabus).forEach(code => {
+        if (!ctData[code]) ctData[code] = [];
+        cloudSyllabus[code].forEach((item, idx) => {
+            const existingMark = getPersonalCTMark(code, idx, ctData[code][idx]?.marks || "");
+            ctData[code][idx] = {
+                ...item,
+                marks: existingMark
+            };
+        });
+    });
+    saveLocal('kuet_ese32_cts', ctData);
+}
+
+// ================= MOBILE & DESKTOP PUSH NOTIFICATION ENGINE =================
+function updateNotificationButtonUI() {
+    const btn = document.getElementById('enableNotifyBtn');
+    const txt = document.getElementById('notifyBtnText');
+    if (!btn || !txt || !("Notification" in window)) return;
+
+    if (Notification.permission === "granted") {
+        txt.textContent = "Alerts On";
+        btn.className = "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition";
+    } else if (Notification.permission === "denied") {
+        txt.textContent = "Alerts Blocked";
+    } else {
+        txt.textContent = "Enable Alerts";
+    }
+}
+
+async function requestPushNotificationPermission() {
+    if (!("Notification" in window)) {
+        alert("📲 On iPhone (iOS): Tap 'Share' -> 'Add to Home Screen' first, then open the app from your Home Screen to enable notifications!");
+        return;
+    }
+
+    const permission = await Notification.requestPermission();
+    updateNotificationButtonUI();
+
+    if (permission === "granted") {
+        triggerIncomingNoticeNotification({
+            date: "Active",
+            type: "info",
+            text: "Notifications are now active! You will receive alerts whenever a class is canceled or an extra class is scheduled."
+        });
+    } else {
+        alert("⚠️ Notification permission was blocked. Please allow notifications in your browser site settings (click the lock icon next to the URL bar).");
+    }
+}
+
+async function triggerIncomingNoticeNotification(noticeObj) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+    const title = noticeObj.type === "canceled"
+        ? "🚨 Class Canceled — ESE 3-2"
+        : noticeObj.type === "extra"
+        ? "📅 Extra Class Scheduled — ESE 3-2"
+        : "📢 New Notice — KUET ESE 3-2";
+
+    const options = {
+        body: noticeObj.text,
+        tag: noticeObj.id || 'ese32-notice-' + Date.now(),
+        renotify: true,
+        vibrate: [200, 100, 200]
+    };
+
+    try {
+        if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg && reg.showNotification) {
+                await reg.showNotification(title, options);
+                return;
+            }
+        }
+        // Fallback to standard browser notification
+        new Notification(title, options);
+    } catch (e) {
+        try {
+            new Notification(title, options);
+        } catch (err) {
+            console.warn("Notification display error:", err);
+        }
+    }
+}
+
+// ================= WEEKLY AUTO-REFRESH ENGINE (RESETS FRIDAY 12:00 AM) =================
 function getCurrentAcademicWeekInfo() {
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -121,7 +298,7 @@ function refreshRoutineKeepEditedRegulars(currentRoutine, fallbackRegularRoutine
     return refreshed;
 }
 
-// ================= STATE & STORAGE =================
+// ================= STATE & INDIVIDUAL USER STORAGE =================
 let isAdmin = false;
 let currentSelectedDay = "Sunday";
 let adminPin = localStorage.getItem('kuet_ese32_pin') || '2022';
@@ -133,8 +310,8 @@ let baseRegularRoutine = loadLocal('kuet_ese32_base_routine', getInitialSeedRout
 let masterRoutine = loadLocal('kuet_ese32_master_routine', baseRegularRoutine);
 
 let notices = loadLocal('kuet_ese32_notices', [
-    { date: "Pinned", type: "info", persistent: true, text: "All theory classes are held in Room ESE-506 (Block-D, Academic Building 1)." },
-    { date: "Lab Update", type: "info", persistent: true, text: "Wednesday 2:30 PM Lab alternates between ESE 3204 (MSH+AA) and ESE 3218 (MR+KS)." }
+    { id: "seed-1", date: "Pinned", type: "info", persistent: true, text: "All theory classes are held in Room ESE-506 (Block-D, Academic Building 1)." },
+    { id: "seed-2", date: "Lab Update", type: "info", persistent: true, text: "Wednesday 2:30 PM Lab alternates between ESE 3204 (MSH+AA) and ESE 3218 (MR+KS)." }
 ]);
 
 let ctData = loadLocal('kuet_ese32_cts', getDefaultCTData());
@@ -163,38 +340,40 @@ function checkAndRunWeeklyAutoRefresh() {
         masterRoutine = refreshRoutineKeepEditedRegulars(masterRoutine, baseRegularRoutine);
         baseRegularRoutine = JSON.parse(JSON.stringify(masterRoutine));
 
-        saveSync('kuet_ese32_master_routine', masterRoutine);
-        saveSync('kuet_ese32_base_routine', baseRegularRoutine);
+        saveLocal('kuet_ese32_master_routine', masterRoutine);
+        saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
         localStorage.setItem('kuet_ese32_week_id', weekId);
 
         notices = notices.filter(n => n.persistent || (n.type !== 'canceled' && n.type !== 'extra' && !n.isWeeklyTemp));
-        saveSync('kuet_ese32_notices', notices);
+        saveLocal('kuet_ese32_notices', notices);
+        pushStateToCloud();
     }
 }
 
 function manualWeeklyRefresh() {
     if (!isAdmin) return;
-    if (!confirm("Run Weekly Refresh now?\n\n• Extra Classes will be removed.\n• Canceled Regular Classes will become Active again.")) return;
+    if (!confirm("Run Weekly Refresh now?\n\n• Extra Classes will be removed.\n• Canceled Regular Classes will become Active again.\n• All your edited Regular Classes will remain as the default.")) return;
 
     masterRoutine = refreshRoutineKeepEditedRegulars(masterRoutine, baseRegularRoutine);
     baseRegularRoutine = JSON.parse(JSON.stringify(masterRoutine));
 
-    saveSync('kuet_ese32_master_routine', masterRoutine);
-    saveSync('kuet_ese32_base_routine', baseRegularRoutine);
+    saveLocal('kuet_ese32_master_routine', masterRoutine);
+    saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
 
     notices = notices.filter(n => n.persistent || (n.type !== 'canceled' && n.type !== 'extra' && !n.isWeeklyTemp));
-    saveSync('kuet_ese32_notices', notices);
+    saveLocal('kuet_ese32_notices', notices);
 
     renderMasterRoutineTable();
     renderDaySchedule(currentSelectedDay);
     renderNotices();
+    pushStateToCloud();
 }
 
 // ================= INITIALIZATION =================
 function initPortal() {
     applySavedTheme();
     checkAndRunWeeklyAutoRefresh();
-    initCloudRealtimeSync();
+    updateNotificationButtonUI();
 
     lucide.createIcons();
     updateClock();
@@ -213,6 +392,10 @@ function initPortal() {
     renderFaculty();
     initGeneralCGPACalculator();
     populateResourceCourseDropdown();
+
+    // Start live cloud polling every 8 seconds so all phones get notices & routine changes automatically
+    pullStateFromCloud(true);
+    setInterval(() => pullStateFromCloud(false), 8000);
 }
 
 function updateClock() {
@@ -277,7 +460,7 @@ function setAdminMode(state) {
         btnText.textContent = "Admin Active (Exit)";
         toggleBtn.className = "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-amber-500 text-slate-950 shadow-sm transition";
         document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
-        if (subtext) subtext.innerHTML = "<strong>Admin Mode:</strong> Click any slot to Edit, Cancel, or Add an Extra Class. Changes sync live to everyone's apps instantly.";
+        if (subtext) subtext.innerHTML = "<strong>Admin Mode:</strong> Click any slot to Edit, Cancel, or Add an Extra Class. Regular class edits are saved permanently as your new default routine.";
     } else {
         banner.classList.add('hidden');
         btnText.textContent = "Admin";
@@ -298,83 +481,7 @@ function logoutAdmin() {
     setAdminMode(false);
 }
 
-// ================= NOTICES & LIVE PUSH NOTIFICATIONS =================
-function postAutomatedNotice(text, type = "info", isWeeklyTemp = false) {
-    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    notices.unshift({ date: today, type, text, isWeeklyTemp });
-    saveSync('kuet_ese32_notices', notices);
-    renderNotices();
-
-    // Trigger Web Push Notification if browser supports it and permission is granted
-    if ("Notification" in window && Notification.permission === "granted") {
-        try {
-            navigator.serviceWorker.ready.then((registration) => {
-                registration.showNotification("📢 ESE 3-2 Class Notice", {
-                    body: text,
-                    icon: "./manifest.json"
-                });
-            });
-        } catch (err) {
-            console.log("Push notification trigger error:", err);
-        }
-    }
-}
-
-async function requestPushNotificationPermission() {
-    if (!("Notification" in window)) {
-        alert("This browser does not support desktop/mobile push notifications.");
-        return;
-    }
-    const permission = await Notification.requestPermission();
-    if (permission === "granted") {
-        alert("✅ Notifications enabled successfully! You will now receive alerts for class cancellations and updates.");
-    } else {
-        alert("Notifications permission denied.");
-    }
-}
-
-function renderNotices() {
-    const list = document.getElementById('noticeList');
-    list.innerHTML = notices.map((n, idx) => {
-        let badgeStyle = "bg-amber-500/15 text-amber-600 dark:text-amber-400";
-        let cardBorder = "border-slate-200/60 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60";
-
-        if (n.type === "canceled" || n.text.includes("CANCELED")) {
-            badgeStyle = "bg-rose-600 text-white";
-            cardBorder = "border-rose-300 dark:border-rose-800/80 bg-rose-50/70 dark:bg-rose-950/30";
-        } else if (n.type === "extra" || n.text.includes("EXTRA CLASS")) {
-            badgeStyle = "bg-purple-600 text-white";
-            cardBorder = "border-purple-300 dark:border-purple-800/80 bg-purple-50/70 dark:bg-purple-950/30";
-        }
-
-        return `
-            <div class="p-2.5 rounded-xl border ${cardBorder} text-xs flex items-start justify-between gap-2">
-                <div>
-                    <span class="inline-block px-1.5 py-0.5 rounded ${badgeStyle} font-mono text-[10px] font-bold mr-1">${n.date}</span>
-                    <span class="text-slate-800 dark:text-slate-200 font-medium">${n.text}</span>
-                </div>
-                ${isAdmin ? `<button onclick="deleteNotice(${idx})" class="text-slate-400 hover:text-rose-500 shrink-0" title="Remove"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
-            </div>
-        `;
-    }).join('');
-    lucide.createIcons();
-}
-
-function promptNewNotice() {
-    if (!isAdmin) return;
-    const text = prompt("Enter new announcement / notice for 2K22 Batch:");
-    if (!text || !text.trim()) return;
-    postAutomatedNotice(text.trim(), "info", false);
-}
-
-function deleteNotice(idx) {
-    if (!isAdmin) return;
-    notices.splice(idx, 1);
-    saveSync('kuet_ese32_notices', notices);
-    renderNotices();
-}
-
-// ================= RENDER TABLES & ROUTINE =================
+// ================= DYNAMIC MASTER ROUTINE TABLE =================
 function getSlotThemeClasses(slot) {
     const isCanceled = slot.status === "canceled";
     const isExtra = slot.kind === "extra";
@@ -385,9 +492,12 @@ function getSlotThemeClasses(slot) {
             cardBg: "canceled-stripes bg-rose-50/90 dark:bg-rose-950/60 border-2 border-rose-500/80 dark:border-rose-500/70",
             codeText: "line-through text-rose-700 dark:text-rose-300",
             subText: "text-rose-600 dark:text-rose-300 font-semibold",
-            badge: isExtra ? `<span class="px-1.5 py-0.5 rounded bg-rose-600 text-white font-mono text-[9px] font-extrabold uppercase tracking-wider">EXTRA CANCELED</span>` : `<span class="px-1.5 py-0.5 rounded bg-rose-600 text-white font-mono text-[9px] font-extrabold uppercase tracking-wider">CANCELED</span>`
+            badge: isExtra
+                ? `<span class="px-1.5 py-0.5 rounded bg-rose-600 text-white font-mono text-[9px] font-extrabold uppercase tracking-wider">EXTRA CANCELED</span>`
+                : `<span class="px-1.5 py-0.5 rounded bg-rose-600 text-white font-mono text-[9px] font-extrabold uppercase tracking-wider">CANCELED</span>`
         };
     }
+
     if (isExtra) {
         return {
             cardBg: "bg-purple-50 dark:bg-purple-950/50 border-2 border-purple-400 dark:border-purple-600 shadow-sm",
@@ -396,6 +506,7 @@ function getSlotThemeClasses(slot) {
             badge: `<span class="px-1.5 py-0.5 rounded bg-purple-600 text-white font-mono text-[9px] font-extrabold uppercase tracking-wider">EXTRA CLASS</span>`
         };
     }
+
     if (isLab) {
         return {
             cardBg: "bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800/70",
@@ -404,6 +515,7 @@ function getSlotThemeClasses(slot) {
             badge: `<span class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 dark:text-sky-300 font-mono text-[9px] font-bold">LAB</span>`
         };
     }
+
     return {
         cardBg: "bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/70",
         codeText: "text-emerald-700 dark:text-emerald-300",
@@ -422,15 +534,21 @@ function renderMasterRoutineTable() {
 
         let p = 0;
         while (p < 9) {
-            if (p === 3 && dayIdx === 0) cellsHtml += `<td rowspan="5" class="bg-amber-50/40 dark:bg-amber-950/10 text-[10px] font-mono text-amber-600 dark:text-amber-400 select-none px-1">BREAK</td>`;
-            if (p === 6 && dayIdx === 0) cellsHtml += `<td rowspan="5" class="bg-amber-50/40 dark:bg-amber-950/10 text-[10px] font-mono text-amber-600 dark:text-amber-400 select-none px-1">LUNCH & PRAYER</td>`;
+            if (p === 3 && dayIdx === 0) {
+                cellsHtml += `<td rowspan="5" class="bg-amber-50/40 dark:bg-amber-950/10 text-[10px] font-mono text-amber-600 dark:text-amber-400 select-none px-1">BREAK</td>`;
+            }
+            if (p === 6 && dayIdx === 0) {
+                cellsHtml += `<td rowspan="5" class="bg-amber-50/40 dark:bg-amber-950/10 text-[10px] font-mono text-amber-600 dark:text-amber-400 select-none px-1">LUNCH & PRAYER</td>`;
+            }
 
             const slot = rowSlots[p];
             if (!slot) {
                 cellsHtml += `
                     <td class="p-1.5">
                         ${isAdmin
-                            ? `<button onclick="openRoutineSlotModal('${day}',${p})" class="w-full py-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-purple-500 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 transition text-[11px] font-mono flex flex-col items-center justify-center gap-0.5"><span>+ Slot</span></button>`
+                            ? `<button onclick="openRoutineSlotModal('${day}',${p})" class="w-full py-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-purple-500 hover:bg-purple-50/40 dark:hover:bg-purple-950/30 text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 transition text-[11px] font-mono flex flex-col items-center justify-center gap-0.5">
+                                <span>+ Slot</span>
+                               </button>`
                             : `<span class="text-slate-300 dark:text-slate-700 select-none">—</span>`
                         }
                     </td>
@@ -455,16 +573,22 @@ function renderMasterRoutineTable() {
                 p += span;
             }
         }
+
         return `<tr class="hover:bg-slate-50/80 dark:hover:bg-slate-900/40">${cellsHtml}</tr>`;
     }).join('');
+
     lucide.createIcons();
 }
 
 function handleRoutineCellClick(day, periodIdx, courseCode) {
-    if (isAdmin) openRoutineSlotModal(day, periodIdx);
-    else openCourseDetail(courseCode);
+    if (isAdmin) {
+        openRoutineSlotModal(day, periodIdx);
+    } else {
+        openCourseDetail(courseCode);
+    }
 }
 
+// ================= DAILY SCHEDULE RENDERER =================
 function renderDaySchedule(day) {
     currentSelectedDay = day;
     document.getElementById('selectedDayTitle').textContent = `${day}'s Classes`;
@@ -529,17 +653,23 @@ function renderDaySchedule(day) {
                     </button>
                     ${isAdmin ? `
                         <div class="flex items-center gap-2">
-                            <button onclick="quickToggleCancelSlot('${day}',${periodIdx})" class="font-bold ${isCanceled ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} hover:underline">${isCanceled ? 'Make Active' : 'Cancel Class'}</button>
-                            <button onclick="openRoutineSlotModal('${day}',${periodIdx})" class="text-slate-500 hover:text-slate-900 dark:hover:text-white font-semibold">Edit</button>
+                            <button onclick="quickToggleCancelSlot('${day}', ${periodIdx})" class="font-bold ${isCanceled ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} hover:underline">
+                                ${isCanceled ? 'Make Active' : 'Cancel Class'}
+                            </button>
+                            <button onclick="openRoutineSlotModal('${day}',${periodIdx})" class="text-slate-500 hover:text-slate-900 dark:hover:text-white font-semibold">
+                                Edit
+                            </button>
                         </div>
                     ` : ''}
                 </div>
             </div>
         `;
     }).join('');
+
     lucide.createIcons();
 }
 
+// ================= ADMIN SLOT EDITOR =================
 function openRoutineSlotModal(day, periodIdx) {
     if (!isAdmin) return;
     document.getElementById('slotDaySelect').value = day || currentSelectedDay;
@@ -616,14 +746,14 @@ function saveRoutineSlotChanges(e) {
     }
 
     masterRoutine[day][pIdx] = { code, teacher, type, kind, status, span, note };
-    saveSync('kuet_ese32_master_routine', masterRoutine);
+    saveLocal('kuet_ese32_master_routine', masterRoutine);
 
     if (kind === "regular") {
         for (let i = 0; i < span && (pIdx + i) < 9; i++) {
             baseRegularRoutine[day][pIdx + i] = null;
         }
         baseRegularRoutine[day][pIdx] = { code, teacher, type, kind: "regular", status: "active", span, note: "" };
-        saveSync('kuet_ese32_base_routine', baseRegularRoutine);
+        saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
     }
 
     const shouldNotify = document.getElementById('slotAutoNoticeCheck').checked;
@@ -631,18 +761,25 @@ function saveRoutineSlotChanges(e) {
         const pInfo = PERIOD_INFO[pIdx];
         const reasonText = note ? ` (${note})` : '';
         let noticeMsg = "";
+        let noticeType = "info";
 
         if (status === "canceled" && kind === "extra") {
-            noticeMsg = `[EXTRA CLASS CANCELED] ${day} ${pInfo.label}: ${code} (${teacher}) extra class is CANCELED${reasonText}.`;
+            noticeType = "canceled";
+            noticeMsg = `[EXTRA CLASS CANCELED] ${day} ${pInfo.label} (${pInfo.short}): Extra class of ${code} (${teacher}) is CANCELED${reasonText}.`;
         } else if (status === "canceled") {
-            noticeMsg = `[CLASS CANCELED] ${day} ${pInfo.label}: ${code} (${teacher}) routine class is CANCELED${reasonText}.`;
+            noticeType = "canceled";
+            noticeMsg = `[CLASS CANCELED] ${day} ${pInfo.label} (${pInfo.short}): Regular class ${code} (${teacher}) is CANCELED for this week${reasonText}.`;
         } else if (kind === "extra") {
-            noticeMsg = `[EXTRA CLASS SCHEDULED] ${day} ${pInfo.label}: ${code} (${teacher})${reasonText}.`;
+            noticeType = "extra";
+            noticeMsg = `[EXTRA CLASS] ${day} ${pInfo.label} (${pInfo.short}): ${code} (${teacher}) extra class scheduled for this week${reasonText}.`;
         } else {
-            noticeMsg = `[ROUTINE UPDATED] ${day} ${pInfo.label}: ${code} (${teacher})${reasonText}.`;
+            noticeType = "info";
+            noticeMsg = `[ROUTINE UPDATED] ${day} ${pInfo.label} (${pInfo.short}): Regular class ${code} (${teacher}) updated${reasonText}.`;
         }
 
-        postAutomatedNotice(noticeMsg, status === "canceled" ? "canceled" : kind, true);
+        postAutomatedNotice(noticeMsg, noticeType, true);
+    } else {
+        pushStateToCloud();
     }
 
     closeRoutineSlotModal();
@@ -659,9 +796,20 @@ function clearSlotCompletely() {
     masterRoutine[day][pIdx] = null;
     if (!existing || existing.kind === "regular") {
         baseRegularRoutine[day][pIdx] = null;
-        saveSync('kuet_ese32_base_routine', baseRegularRoutine);
+        saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
+    } else if (existing && existing.kind === "extra" && baseRegularRoutine[day][pIdx]) {
+        masterRoutine[day][pIdx] = { ...baseRegularRoutine[day][pIdx], status: "active", note: "" };
     }
-    saveSync('kuet_ese32_master_routine', masterRoutine);
+
+    saveLocal('kuet_ese32_master_routine', masterRoutine);
+
+    if (existing && document.getElementById('slotAutoNoticeCheck').checked) {
+        const pInfo = PERIOD_INFO[pIdx];
+        postAutomatedNotice(`[SLOT REMOVED] ${day} ${pInfo.label}: ${existing.code} (${existing.teacher}) removed from schedule.`, "info", true);
+    } else {
+        pushStateToCloud();
+    }
+
     closeRoutineSlotModal();
     renderMasterRoutineTable();
     renderDaySchedule(day);
@@ -676,22 +824,252 @@ function quickToggleCancelSlot(day, periodIdx) {
     if (slot.status === "canceled") {
         slot.status = "active";
         slot.note = "";
-        postAutomatedNotice(`[ACTIVE] ${day} ${pInfo.label}: ${slot.code} (${slot.teacher}) is active as scheduled.`, "info", true);
+        saveLocal('kuet_ese32_master_routine', masterRoutine);
+        postAutomatedNotice(`[ACTIVE] ${day} ${pInfo.label} (${pInfo.short}): ${slot.kind === 'extra' ? 'Extra class' : 'Regular class'} ${slot.code} (${slot.teacher}) is active as scheduled.`, "info", true);
     } else {
-        const reason = prompt(`Cancel ${slot.code} (${slot.teacher}) on ${day} ${pInfo.label}?\nOptional reason:`, "Professor busy / Postponed");
+        const reason = prompt(`Cancel ${slot.code} (${slot.teacher}) on ${day} ${pInfo.label} for this week?\nOptional reason (shown to students & posted in Notice Board):`, "Professor busy / Class postponed");
         if (reason === null) return;
         slot.status = "canceled";
         slot.note = reason.trim();
+        saveLocal('kuet_ese32_master_routine', masterRoutine);
         const prefix = slot.kind === "extra" ? "[EXTRA CLASS CANCELED]" : "[CLASS CANCELED]";
-        postAutomatedNotice(`${prefix} ${day} ${pInfo.label}: ${slot.code} (${slot.teacher}) is CANCELED.${slot.note ? ' Note: ' + slot.note : ''}`, "canceled", true);
+        postAutomatedNotice(`${prefix} ${day} ${pInfo.label} (${pInfo.short}): ${slot.code} (${slot.teacher}) is CANCELED.${slot.note ? ' Note: ' + slot.note : ''}`, "canceled", true);
     }
 
-    saveSync('kuet_ese32_master_routine', masterRoutine);
     renderMasterRoutineTable();
     renderDaySchedule(day);
 }
 
-// ================= OTHER TABS & UTILS =================
+// ================= NOTICES & AUTOMATED ALERTS =================
+function postAutomatedNotice(text, type = "info", isWeeklyTemp = false) {
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const newNotice = {
+        id: 'notice-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        date: today,
+        type,
+        text,
+        isWeeklyTemp
+    };
+
+    lastSeenNoticeId = newNotice.id;
+    localStorage.setItem('kuet_ese32_last_notice_id', newNotice.id);
+
+    notices.unshift(newNotice);
+    saveLocal('kuet_ese32_notices', notices);
+    renderNotices();
+
+    // Push to cloud so all students' phones receive it and trigger their notification
+    pushStateToCloud();
+
+    // Also show confirmation notification on Admin's own device if enabled
+    triggerIncomingNoticeNotification(newNotice);
+}
+
+function renderNotices() {
+    const list = document.getElementById('noticeList');
+    list.innerHTML = notices.map((n, idx) => {
+        let badgeStyle = "bg-amber-500/15 text-amber-600 dark:text-amber-400";
+        let cardBorder = "border-slate-200/60 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60";
+
+        if (n.type === "canceled" || n.text.includes("CANCELED")) {
+            badgeStyle = "bg-rose-600 text-white";
+            cardBorder = "border-rose-300 dark:border-rose-800/80 bg-rose-50/70 dark:bg-rose-950/30";
+        } else if (n.type === "extra" || n.text.includes("EXTRA CLASS")) {
+            badgeStyle = "bg-purple-600 text-white";
+            cardBorder = "border-purple-300 dark:border-purple-800/80 bg-purple-50/70 dark:bg-purple-950/30";
+        }
+
+        return `
+            <div class="p-2.5 rounded-xl border ${cardBorder} text-xs flex items-start justify-between gap-2">
+                <div>
+                    <span class="inline-block px-1.5 py-0.5 rounded ${badgeStyle} font-mono text-[10px] font-bold mr-1">${n.date}</span>
+                    <span class="text-slate-800 dark:text-slate-200 font-medium">${n.text}</span>
+                </div>
+                ${isAdmin ? `<button onclick="deleteNotice(${idx})" class="text-slate-400 hover:text-rose-500 shrink-0" title="Remove"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+            </div>
+        `;
+    }).join('');
+    lucide.createIcons();
+}
+
+function promptNewNotice() {
+    if (!isAdmin) return;
+    const text = prompt("Enter new announcement / CT notice for 2K22 Batch:");
+    if (!text || !text.trim()) return;
+    postAutomatedNotice(text.trim(), "info", false);
+}
+
+function deleteNotice(idx) {
+    if (!isAdmin) return;
+    notices.splice(idx, 1);
+    saveLocal('kuet_ese32_notices', notices);
+    renderNotices();
+    pushStateToCloud();
+}
+
+// ================= ADMIN DRIVE LINKS MANAGER =================
+function openAdminDriveManager() {
+    if (!isAdmin) return;
+    document.getElementById('adminMasterDriveInput').value = masterDriveUrl;
+    const container = document.getElementById('adminCourseDriveInputs');
+    container.innerHTML = COURSES.map(c => `
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div class="sm:w-1/3">
+                <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400">${c.code}</span>
+                <div class="font-semibold text-slate-800 dark:text-slate-200 truncate">${c.title}</div>
+            </div>
+            <div class="sm:w-2/3 flex items-center gap-2">
+                <input type="url" data-course-drive="${c.code}" value="${courseDriveLinks[c.code] || ''}" placeholder="Paste ${c.code} Google Drive Folder URL..." class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-xs">
+            </div>
+        </div>
+    `).join('');
+    document.getElementById('adminDriveModal').classList.remove('hidden');
+    lucide.createIcons();
+}
+
+function closeAdminDriveManager() {
+    document.getElementById('adminDriveModal').classList.add('hidden');
+}
+
+function saveAllAdminDriveLinks() {
+    if (!isAdmin) return;
+    const newMaster = document.getElementById('adminMasterDriveInput').value.trim();
+    masterDriveUrl = newMaster || 'https://drive.google.com';
+    saveLocal('kuet_ese32_master_drive', masterDriveUrl);
+
+    document.querySelectorAll('[data-course-drive]').forEach(inp => {
+        const code = inp.dataset.courseDrive;
+        const val = inp.value.trim();
+        if (val) {
+            courseDriveLinks[code] = val;
+        } else {
+            delete courseDriveLinks[code];
+        }
+    });
+
+    saveLocal('kuet_ese32_course_drives', courseDriveLinks);
+    syncMasterDriveButtons();
+    renderCourses();
+    closeAdminDriveManager();
+    pushStateToCloud();
+}
+
+function promptSingleCourseDriveLink(courseCode) {
+    if (!isAdmin) return;
+    const current = courseDriveLinks[courseCode] || '';
+    const nextUrl = prompt(`Paste the Google Drive Folder link for ${courseCode}:`, current);
+    if (nextUrl === null) return;
+    if (nextUrl.trim()) {
+        courseDriveLinks[courseCode] = nextUrl.trim();
+    } else {
+        delete courseDriveLinks[courseCode];
+    }
+    saveLocal('kuet_ese32_course_drives', courseDriveLinks);
+    renderCourses();
+    if (activeCourseModalCode === courseCode) {
+        openCourseDetail(courseCode);
+    }
+    pushStateToCloud();
+}
+
+// ================= CLOUD SYNC / EXPORT JSON MODAL =================
+function openCloudSyncModal() {
+    if (!isAdmin) return;
+    const exportPayload = {
+        firebaseDbUrl,
+        masterDriveUrl,
+        courseDriveLinks,
+        baseRegularRoutine,
+        masterRoutine,
+        customResources,
+        notices
+    };
+    document.getElementById('configJsonBox').value = JSON.stringify(exportPayload, null, 2);
+
+    // Ask Admin if they want to set/update the live Firebase URL right from the UI
+    const newFbUrl = prompt(
+        "☁️ LIVE CLOUD SYNC SETUP (Firebase Realtime Database URL):\n\n" +
+        "Paste your Firebase Realtime Database URL (e.g. https://your-project-default-rtdb.firebaseio.com) so notices & routine edits sync live:",
+        firebaseDbUrl
+    );
+    if (newFbUrl !== null && newFbUrl.trim() !== firebaseDbUrl) {
+        firebaseDbUrl = newFbUrl.trim().replace(/\/$/, '');
+        localStorage.setItem('kuet_ese32_firebase_url', firebaseDbUrl);
+        pushStateToCloud();
+        alert("✅ Firebase Database URL connected! Don't forget to also paste this URL into DEFAULT_FIREBASE_DB_URL (Line 15 of js/app.js) on GitHub so all students' phones connect automatically!");
+    }
+
+    document.getElementById('cloudSyncModal').classList.remove('hidden');
+    lucide.createIcons();
+}
+
+function closeCloudSyncModal() {
+    document.getElementById('cloudSyncModal').classList.add('hidden');
+}
+
+function updateAdminPin() {
+    if (!isAdmin) return;
+    const val = document.getElementById('newAdminPinInput').value.trim();
+    if (!val) return alert("Enter a new PIN first.");
+    adminPin = val;
+    saveLocal('kuet_ese32_pin', adminPin);
+    alert(`Admin PIN updated to: ${adminPin}`);
+}
+
+function copyConfigJson() {
+    const box = document.getElementById('configJsonBox');
+    box.select();
+    navigator.clipboard.writeText(box.value);
+    alert("Configuration JSON copied to clipboard!");
+}
+
+function importConfigJson() {
+    if (!isAdmin) return;
+    try {
+        const raw = document.getElementById('configJsonBox').value.trim();
+        const parsed = JSON.parse(raw);
+        if (parsed.firebaseDbUrl) {
+            firebaseDbUrl = parsed.firebaseDbUrl.replace(/\/$/, '');
+            localStorage.setItem('kuet_ese32_firebase_url', firebaseDbUrl);
+        }
+        if (parsed.masterDriveUrl) {
+            masterDriveUrl = parsed.masterDriveUrl;
+            saveLocal('kuet_ese32_master_drive', masterDriveUrl);
+        }
+        if (parsed.courseDriveLinks) {
+            courseDriveLinks = parsed.courseDriveLinks;
+            saveLocal('kuet_ese32_course_drives', courseDriveLinks);
+        }
+        if (parsed.baseRegularRoutine) {
+            baseRegularRoutine = parsed.baseRegularRoutine;
+            saveLocal('kuet_ese32_base_routine', baseRegularRoutine);
+        }
+        if (parsed.masterRoutine) {
+            masterRoutine = parsed.masterRoutine;
+            saveLocal('kuet_ese32_master_routine', masterRoutine);
+        }
+        if (Array.isArray(parsed.customResources)) {
+            customResources = parsed.customResources;
+            saveLocal('kuet_ese32_resources', customResources);
+        }
+        if (Array.isArray(parsed.notices)) {
+            notices = parsed.notices;
+            saveLocal('kuet_ese32_notices', notices);
+        }
+        syncMasterDriveButtons();
+        renderMasterRoutineTable();
+        renderDaySchedule(currentSelectedDay);
+        renderNotices();
+        renderCourses();
+        pushStateToCloud();
+        closeCloudSyncModal();
+        alert("All routine changes, Drive links, notices, and materials imported & synced!");
+    } catch (e) {
+        alert("Invalid JSON format.");
+    }
+}
+
+// ================= TAB NAVIGATION =================
 function switchTab(tabId) {
     ['dashboard', 'courses', 'ct-tracker', 'faculty', 'sgpa'].forEach(id => {
         document.getElementById(`tab-${id}`).classList.add('hidden');
@@ -708,6 +1086,7 @@ function switchTab(tabId) {
     lucide.createIcons();
 }
 
+// ================= COURSES & GOOGLE DRIVE REPOSITORY =================
 function getMergedMaterials(courseCode) {
     const base = COURSES.find(c => c.code === courseCode)?.materials || [];
     const extra = customResources.filter(r => r.courseCode === courseCode);
@@ -721,26 +1100,73 @@ function renderCourses() {
 
     const filtered = COURSES.filter(c => {
         const matchesType = typeFilter === 'ALL' || c.type === typeFilter;
-        return matchesType && (c.code.toLowerCase().includes(query) || c.title.toLowerCase().includes(query));
+        const teacherNames = c.teachers.map(t => FACULTY[t]?.name || t).join(' ').toLowerCase();
+        const matchesQuery = c.code.toLowerCase().includes(query) ||
+                             c.title.toLowerCase().includes(query) ||
+                             c.teachers.join(' ').toLowerCase().includes(query) ||
+                             teacherNames.includes(query);
+        return matchesType && matchesQuery;
     });
 
     grid.innerHTML = filtered.map(c => {
         const materials = getMergedMaterials(c.code);
+        const isTheory = c.type === 'Theory';
         const driveUrl = getCourseDriveUrl(c.code);
+        const isCustomLinked = hasCustomCourseDrive(c.code);
+
         return `
-            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-sm flex flex-col justify-between">
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
                 <div>
                     <div class="flex items-center justify-between gap-2">
-                        <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">${c.code}</span>
-                        <span class="text-xs font-mono font-semibold text-slate-500">${c.credit.toFixed(2)} Cr</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold ${isTheory ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-sky-500/15 text-sky-700 dark:text-sky-300'}">${c.code}</span>
+                            ${isCustomLinked ? `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-semibold">Drive Linked</span>` : ''}
+                        </div>
+                        <span class="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400">${c.credit.toFixed(2)} Cr</span>
                     </div>
+
                     <h3 class="font-extrabold text-base mt-2.5 text-slate-900 dark:text-white">${c.title}</h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+                        <i data-lucide="users" class="w-3.5 h-3.5 text-emerald-500"></i>
+                        <span><strong>${c.teachers.map(t => FACULTY[t] ? `${t} (${FACULTY[t].name})` : t).join(', ')}</strong></span>
+                    </p>
+
                     <div class="mt-4">
                         <a href="${driveUrl}" target="_blank" class="w-full py-2.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition flex items-center justify-center gap-2">
                             <i data-lucide="hard-drive" class="w-4 h-4"></i>
                             <span>Open ${c.code} Google Drive</span>
+                            <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
                         </a>
                     </div>
+
+                    <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            <span>Pinned Files (${materials.length})</span>
+                            ${isAdmin ? `<button onclick="promptSingleCourseDriveLink('${c.code}')" class="text-amber-500 hover:underline font-mono">Edit Drive URL</button>` : ''}
+                        </div>
+                        ${materials.slice(0, 2).map(m => `
+                            <a href="${m.url}" target="_blank" class="block p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200/60 dark:border-slate-800 text-xs transition">
+                                <div class="font-semibold text-slate-800 dark:text-slate-200 truncate">${m.title}</div>
+                                <div class="text-[10px] text-slate-500 flex justify-between mt-0.5">
+                                    <span>${m.category}</span>
+                                    <span class="font-mono text-emerald-600 dark:text-emerald-400">${m.section || ''}</span>
+                                </div>
+                            </a>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <button onclick="openCourseDetail('${c.code}')" class="text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 flex items-center gap-1">
+                        <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+                        View All Files / Embed (${materials.length})
+                    </button>
+                    ${isAdmin ? `
+                        <button onclick="openResourceModal('${c.code}')" class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500 hover:text-white text-xs font-semibold transition flex items-center gap-1">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                            <span>Add Link</span>
+                        </button>
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -748,20 +1174,214 @@ function renderCourses() {
     lucide.createIcons();
 }
 
+function openCourseDetail(courseCode) {
+    const course = COURSES.find(c => c.code === courseCode);
+    if (!course) return;
+    activeCourseModalCode = courseCode;
+
+    const driveUrl = getCourseDriveUrl(courseCode);
+    document.getElementById('modalCourseCode').textContent = course.code;
+    document.getElementById('modalCourseCredit').textContent = `${course.credit.toFixed(2)} Credits • ${course.type}`;
+    document.getElementById('modalCourseTitle').textContent = course.title;
+    document.getElementById('modalCourseTeachers').textContent = `Instructors: ${course.teachers.map(t => FACULTY[t] ? `${FACULTY[t].name} (${t})` : t).join(' • ')} | Routine: ${course.schedule}`;
+    document.getElementById('modalPrimaryDriveBtn').href = driveUrl;
+
+    const folderId = extractDriveFolderId(driveUrl);
+    const embedSec = document.getElementById('modalDriveEmbedSection');
+    const iframe = document.getElementById('modalDriveIframe');
+    if (folderId) {
+        iframe.src = `https://drive.google.com/embeddedfolderview?id=${folderId}#list`;
+        embedSec.classList.remove('hidden');
+    } else {
+        iframe.src = "";
+        embedSec.classList.add('hidden');
+    }
+
+    const materials = getMergedMaterials(courseCode);
+    const body = document.getElementById('modalCourseBody');
+    body.innerHTML = materials.map(m => `
+        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700 hover:border-emerald-500 transition gap-3">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-bold">${m.category}</span>
+                    <span class="text-[11px] font-mono text-slate-500">${m.section || 'All Sections'}</span>
+                </div>
+                <div class="font-bold text-sm mt-1 text-slate-900 dark:text-white">${m.title}</div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <a href="${m.url}" target="_blank" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1">
+                    <span>Open Drive</span>
+                    <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                </a>
+                ${isAdmin && m.isCustom ? `<button onclick="deleteCustomResource('${courseCode}', '${m.title}')" class="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+            </div>
+        </div>
+    `).join('');
+
+    document.getElementById('courseDetailModal').classList.remove('hidden');
+    lucide.createIcons();
+}
+
+function deleteCustomResource(courseCode, title) {
+    if (!isAdmin) return;
+    customResources = customResources.filter(r => !(r.courseCode === courseCode && r.title === title));
+    saveLocal('kuet_ese32_resources', customResources);
+    renderCourses();
+    openCourseDetail(courseCode);
+    pushStateToCloud();
+}
+
+function closeCourseDetail() {
+    document.getElementById('courseDetailModal').classList.add('hidden');
+}
+
+// ================= ADD RESOURCE MODAL =================
+function populateResourceCourseDropdown() {
+    const select = document.getElementById('resCourseCode');
+    select.innerHTML = COURSES.map(c => `<option value="${c.code}">${c.code} — ${c.title}</option>`).join('');
+}
+
+function openResourceModal(preselectedCode) {
+    if (!isAdmin) return;
+    if (preselectedCode) {
+        document.getElementById('resCourseCode').value = preselectedCode;
+    }
+    document.getElementById('addResourceModal').classList.remove('hidden');
+}
+
+function openResourceModalFromCourse() {
+    if (!isAdmin) return;
+    closeCourseDetail();
+    openResourceModal(activeCourseModalCode);
+}
+
+function closeResourceModal() {
+    document.getElementById('addResourceModal').classList.add('hidden');
+}
+
+function saveNewResource(e) {
+    e.preventDefault();
+    if (!isAdmin) return;
+    const courseCode = document.getElementById('resCourseCode').value;
+    const category = document.getElementById('resCategory').value;
+    const section = document.getElementById('resSection').value.trim();
+    const title = document.getElementById('resTitle').value.trim();
+    const url = document.getElementById('resUrl').value.trim();
+
+    customResources.unshift({ courseCode, category, section, title, url, isCustom: true });
+    saveLocal('kuet_ese32_resources', customResources);
+    closeResourceModal();
+    renderCourses();
+    openCourseDetail(courseCode);
+    pushStateToCloud();
+    e.target.reset();
+}
+
+// ================= CT & EXAM TRACKER =================
+function getPersonalCTMark(courseCode, idx, fallbackMark) {
+    const key = `${courseCode}_${idx}`;
+    if (personalCTMarks[key] !== undefined) return personalCTMarks[key];
+    return fallbackMark || "";
+}
+
+function renderCTTracker() {
+    const container = document.getElementById('ctTrackerContainer');
+    const theoryCourses = COURSES.filter(c => c.type === 'Theory');
+
+    container.innerHTML = theoryCourses.map(course => {
+        const cts = ctData[course.code] || [];
+        return `
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-5">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div>
+                        <span class="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">${course.code} (${course.credit.toFixed(2)} Cr)</span>
+                        <h3 class="font-extrabold text-base">${course.title}</h3>
+                    </div>
+                    <span class="text-xs text-slate-500">Teachers: <strong>${course.teachers.join(' & ')}</strong></span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${cts.length} gap-3">
+                    ${cts.map((ct, idx) => {
+                        const savedMark = getPersonalCTMark(course.code, idx, ct.marks);
+                        return `
+                            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/80 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-mono font-bold text-xs">${ct.name} (${ct.teacher})</span>
+                                    ${isAdmin ? `
+                                        <select onchange="updateCTField('${course.code}', ${idx}, 'status', this.value)" class="text-[11px] font-semibold px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                                            <option value="Upcoming" ${ct.status === 'Upcoming' ? 'selected' : ''}>Upcoming</option>
+                                            <option value="Done" ${ct.status === 'Done' ? 'selected' : ''}>Done</option>
+                                            <option value="Pending" ${ct.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                        </select>
+                                    ` : `
+                                        <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">${ct.status}</span>
+                                    `}
+                                </div>
+                                <div>
+                                    <label class="text-[10px] uppercase font-mono text-slate-400">Syllabus / Topic</label>
+                                    ${isAdmin ? `
+                                        <input type="text" value="${ct.syllabus}" onchange="updateCTField('${course.code}', ${idx}, 'syllabus', this.value)" class="w-full mt-0.5 px-2 py-1 text-xs rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                                    ` : `
+                                        <div class="mt-0.5 text-xs font-medium text-slate-800 dark:text-slate-200">${ct.syllabus}</div>
+                                    `}
+                                </div>
+                                <div class="flex items-center justify-between pt-1">
+                                    <span class="text-[11px] text-slate-500">My Marks (/20):</span>
+                                    <input type="text" placeholder="-- / 20" value="${savedMark}" oninput="savePersonalCTMark('${course.code}', ${idx}, this.value)" class="w-24 text-center font-mono text-xs px-2 py-1 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function savePersonalCTMark(courseCode, idx, value) {
+    const key = `${courseCode}_${idx}`;
+    personalCTMarks[key] = value;
+    saveLocal('kuet_ese32_personal_marks', personalCTMarks);
+
+    if (ctData[courseCode] && ctData[courseCode][idx]) {
+        ctData[courseCode][idx].marks = value;
+        saveLocal('kuet_ese32_cts', ctData);
+    }
+}
+
+function updateCTField(courseCode, idx, field, value) {
+    ctData[courseCode][idx][field] = value;
+    saveLocal('kuet_ese32_cts', ctData);
+    pushStateToCloud();
+}
+
+function resetCTData() {
+    if (!isAdmin) return;
+    ctData = getDefaultCTData();
+    saveLocal('kuet_ese32_cts', ctData);
+    renderCTTracker();
+    pushStateToCloud();
+}
+
+// ================= FACULTY DIRECTORY =================
 function renderFaculty() {
     const grid = document.getElementById('facultyGrid');
     grid.innerHTML = Object.values(FACULTY).map(f => `
         <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-start gap-3.5 shadow-sm">
-            <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono font-extrabold text-sm flex items-center justify-center shrink-0">${f.code}</div>
+            <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono font-extrabold text-sm flex items-center justify-center shrink-0 border border-emerald-500/20">
+                ${f.code}
+            </div>
             <div>
                 <h3 class="font-bold text-sm text-slate-900 dark:text-white">${f.name}</h3>
                 <p class="text-xs text-slate-500 dark:text-slate-400">${f.role}</p>
+                <div class="flex flex-wrap gap-1 mt-2">
+                    ${f.courses.map(c => `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold">${c}</span>`).join('')}
+                </div>
             </div>
         </div>
     `).join('');
 }
 
-// ================= CGPA CALCULATOR =================
+// ================= GENERAL & KUET CURRICULUM CGPA CALCULATOR =================
 function initGeneralCGPACalculator() {
     PREVIOUS_TERM_CREDITS.forEach(t => {
         const el = document.getElementById(t.id);
@@ -769,6 +1389,17 @@ function initGeneralCGPACalculator() {
             el.value = personalCGPAState.termGPAs[t.id];
         }
     });
+
+    const directCrEl = document.getElementById('prevCreditsInput');
+    const directCgEl = document.getElementById('prevCGPAInput');
+    if (directCrEl && personalCGPAState.directCredits !== undefined) directCrEl.value = personalCGPAState.directCredits;
+    if (directCgEl && personalCGPAState.directCGPA !== undefined) directCgEl.value = personalCGPAState.directCGPA;
+
+    const badge = document.getElementById('loadedPresetBadge');
+    if (badge && personalCGPAState.activePresetLabel) {
+        badge.textContent = personalCGPAState.activePresetLabel;
+    }
+
     setPrevCalcMode(personalCGPAState.mode || 'terms');
     renderGeneralCalcRows();
 }
@@ -776,6 +1407,33 @@ function initGeneralCGPACalculator() {
 function setPrevCalcMode(mode) {
     prevCalcMode = mode;
     personalCGPAState.mode = mode;
+    saveLocal('kuet_ese32_personal_cgpa_state', personalCGPAState);
+
+    const termsWrapper = document.getElementById('prevTermsGridWrapper');
+    const directWrapper = document.getElementById('prevDirectWrapper');
+    const termsBtn = document.getElementById('prevModeTermsBtn');
+    const directBtn = document.getElementById('prevModeDirectBtn');
+
+    if (mode === 'terms') {
+        termsWrapper.classList.remove('hidden');
+        directWrapper.classList.add('hidden');
+        termsBtn.className = "px-2.5 py-1 rounded-lg font-bold bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm transition";
+        directBtn.className = "px-2.5 py-1 rounded-lg font-bold text-slate-500 transition";
+    } else {
+        termsWrapper.classList.add('hidden');
+        directWrapper.classList.remove('hidden');
+        directBtn.className = "px-2.5 py-1 rounded-lg font-bold bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm transition";
+        termsBtn.className = "px-2.5 py-1 rounded-lg font-bold text-slate-500 transition";
+    }
+    calculateGeneralCGPA();
+}
+
+function clearPreviousTermsInputs() {
+    PREVIOUS_TERM_CREDITS.forEach(t => {
+        const el = document.getElementById(t.id);
+        if (el) el.value = "";
+        if (personalCGPAState.termGPAs) personalCGPAState.termGPAs[t.id] = "";
+    });
     saveLocal('kuet_ese32_personal_cgpa_state', personalCGPAState);
     calculateGeneralCGPA();
 }
@@ -786,20 +1444,57 @@ function loadSemesterPreset(termKey) {
     generalCalcRows = JSON.parse(JSON.stringify(preset.courses));
     personalCGPAState.activePresetLabel = preset.label;
     saveLocal('kuet_ese32_personal_cgpa_state', personalCGPAState);
+
+    const badge = document.getElementById('loadedPresetBadge');
+    if (badge) badge.textContent = preset.label;
+    saveGeneralRows();
     renderGeneralCalcRows();
 }
 
 function renderGeneralCalcRows() {
     const container = document.getElementById('generalCalcRowsContainer');
-    container.innerHTML = generalCalcRows.map((row, idx) => `
-        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800 text-xs">
-            <div class="sm:col-span-5"><input type="text" value="${row.name}" oninput="updateGeneralRow(${idx}, 'name', this.value)" class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-semibold"></div>
-            <div class="sm:col-span-2"><input type="number" step="0.25" min="0" value="${row.credit}" oninput="updateGeneralRow(${idx}, 'credit', this.value)" class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-center"></div>
-            <div class="sm:col-span-2"><select onchange="syncRowGradeSelect(${idx}, this.value)" class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-semibold">${GRADE_OPTIONS.map(g => `<option value="${g.val}" ${Math.abs(row.gp - g.val) < 0.001 ? 'selected' : ''}>${g.label}</option>`).join('')}</select></div>
-            <div class="sm:col-span-2"><input type="number" step="0.01" min="0" max="4" value="${row.gp}" oninput="updateGeneralRow(${idx}, 'gp', this.value)" class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-emerald-600 dark:text-emerald-400 text-center"></div>
-            <div class="sm:col-span-1 flex justify-end"><button onclick="removeGeneralCourseRow(${idx})" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>
-        </div>
-    `).join('');
+    if (generalCalcRows.length === 0) {
+        container.innerHTML = `<div class="p-6 text-center rounded-xl bg-slate-50 dark:bg-slate-800/50 text-xs text-slate-400">No courses in active list. Click any semester button above (1-1 to 3-2) or click <strong>"Add Course"</strong>.</div>`;
+        calculateGeneralCGPA();
+        return;
+    }
+
+    container.innerHTML = generalCalcRows.map((row, idx) => {
+        const isNonCredit = parseFloat(row.credit) === 0;
+        return `
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center p-2.5 rounded-xl ${isNonCredit ? 'bg-slate-100/70 dark:bg-slate-900/40 opacity-75' : 'bg-slate-50 dark:bg-slate-800/60'} border border-slate-200/70 dark:border-slate-800 text-xs">
+                <div class="sm:col-span-5">
+                    <label class="sm:hidden text-[10px] font-mono uppercase text-slate-400 block mb-0.5">Course No. & Title</label>
+                    <input type="text" value="${row.name}" oninput="updateGeneralRow(${idx}, 'name', this.value)" placeholder="e.g. ESE 3203" class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-semibold">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="sm:hidden text-[10px] font-mono uppercase text-slate-400 block mb-0.5">Credit Hours</label>
+                    <input type="number" step="0.25" min="0" value="${row.credit}" oninput="updateGeneralRow(${idx}, 'credit', this.value)" placeholder="3.00" class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-center">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="sm:hidden text-[10px] font-mono uppercase text-slate-400 block mb-0.5">Letter Grade</label>
+                    ${isNonCredit ? `
+                        <div class="px-2 py-1.5 rounded-lg bg-slate-200/70 dark:bg-slate-800 text-center font-mono text-[11px] font-bold text-slate-500">S (Non-Credit)</div>
+                    ` : `
+                        <select onchange="syncRowGradeSelect(${idx}, this.value)" class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-semibold">
+                            ${GRADE_OPTIONS.map(g => `<option value="${g.val}" ${Math.abs(row.gp - g.val) < 0.001 ? 'selected' : ''}>${g.label}</option>`).join('')}
+                            <option value="custom" ${!GRADE_OPTIONS.some(g => Math.abs(row.gp - g.val) < 0.001) ? 'selected' : ''}>Custom GP</option>
+                        </select>
+                    `}
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="sm:hidden text-[10px] font-mono uppercase text-slate-400 block mb-0.5">Grade Point (0.00 - 4.00)</label>
+                    <input type="number" step="0.01" min="0" max="4" value="${row.gp}" ${isNonCredit ? 'disabled' : ''} oninput="updateGeneralRow(${idx}, 'gp', this.value)" placeholder="4.00" class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-emerald-600 dark:text-emerald-400 text-center">
+                </div>
+                <div class="sm:col-span-1 flex justify-end">
+                    <button onclick="removeGeneralCourseRow(${idx})" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition" title="Remove Course">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
     lucide.createIcons();
     calculateGeneralCGPA();
 }
@@ -817,14 +1512,26 @@ function removeGeneralCourseRow(idx) {
 }
 
 function updateGeneralRow(idx, field, val) {
-    if (field === 'name') generalCalcRows[idx].name = val;
-    else if (field === 'credit') generalCalcRows[idx].credit = parseFloat(val) || 0;
-    else if (field === 'gp') generalCalcRows[idx].gp = parseFloat(val) || 0;
+    if (field === 'name') {
+        generalCalcRows[idx].name = val;
+    } else if (field === 'credit') {
+        generalCalcRows[idx].credit = parseFloat(val) || 0;
+        saveGeneralRows();
+        renderGeneralCalcRows();
+        return;
+    } else if (field === 'gp') {
+        let num = parseFloat(val);
+        if (isNaN(num)) num = 0;
+        if (num > 4) num = 4;
+        if (num < 0) num = 0;
+        generalCalcRows[idx].gp = num;
+    }
     saveGeneralRows();
     calculateGeneralCGPA();
 }
 
 function syncRowGradeSelect(idx, val) {
+    if (val === 'custom') return;
     generalCalcRows[idx].gp = parseFloat(val) || 0;
     saveGeneralRows();
     renderGeneralCalcRows();
@@ -843,10 +1550,14 @@ function saveGeneralRows() {
 function calculateGeneralCGPA() {
     let termCredits = 0;
     let termPoints = 0;
+
     generalCalcRows.forEach(r => {
         const cr = parseFloat(r.credit) || 0;
         const gp = parseFloat(r.gp) || 0;
-        if (cr > 0) { termCredits += cr; termPoints += (cr * gp); }
+        if (cr > 0) {
+            termCredits += cr;
+            termPoints += (cr * gp);
+        }
     });
 
     const sgpa = termCredits > 0 ? (termPoints / termCredits) : 0;
@@ -857,16 +1568,36 @@ function calculateGeneralCGPA() {
 
     let prevCr = 0;
     let prevPoints = 0;
+
     if (!personalCGPAState.termGPAs) personalCGPAState.termGPAs = {};
 
-    PREVIOUS_TERM_CREDITS.forEach(t => {
-        const rawVal = document.getElementById(t.id)?.value;
-        personalCGPAState.termGPAs[t.id] = rawVal !== undefined ? rawVal : "";
-        if (rawVal !== undefined && rawVal !== "") {
-            const gpa = parseFloat(rawVal);
-            if (!isNaN(gpa)) { prevCr += t.credit; prevPoints += (t.credit * gpa); }
+    if (prevCalcMode === 'terms') {
+        PREVIOUS_TERM_CREDITS.forEach(t => {
+            const rawVal = document.getElementById(t.id)?.value;
+            personalCGPAState.termGPAs[t.id] = rawVal !== undefined ? rawVal : "";
+            if (rawVal !== undefined && rawVal !== "") {
+                const gpa = parseFloat(rawVal);
+                if (!isNaN(gpa) && gpa >= 0 && gpa <= 4) {
+                    prevCr += t.credit;
+                    prevPoints += (t.credit * gpa);
+                }
+            }
+        });
+        const prevCgpaCalc = prevCr > 0 ? (prevPoints / prevCr) : 0;
+        const summaryEl = document.getElementById('prevTermsSummaryText');
+        if (summaryEl) {
+            summaryEl.textContent = `Previous Completed: ${prevCr.toFixed(2)} Credits | Previous CGPA: ${prevCgpaCalc.toFixed(2)}`;
         }
-    });
+    } else {
+        const rawCr = document.getElementById('prevCreditsInput')?.value || "";
+        const rawCg = document.getElementById('prevCGPAInput')?.value || "";
+        personalCGPAState.directCredits = rawCr;
+        personalCGPAState.directCGPA = rawCg;
+
+        prevCr = parseFloat(rawCr) || 0;
+        const prevCg = parseFloat(rawCg) || 0;
+        prevPoints = prevCr * prevCg;
+    }
 
     saveLocal('kuet_ese32_personal_cgpa_state', personalCGPAState);
     document.getElementById('calcPrevCreditsStat').textContent = prevCr.toFixed(2);
@@ -879,16 +1610,67 @@ function calculateGeneralCGPA() {
     document.getElementById('calculatedTotalCreditsText').textContent = `Total Combined Credits: ${totalCredits.toFixed(2)}`;
 }
 
-// ================= THEME =================
+// ================= PERSISTENT DARK / LIGHT MODE PER USER =================
 function applySavedTheme() {
     const savedTheme = localStorage.getItem('kuet_ese32_theme');
-    if (savedTheme === 'dark') document.documentElement.classList.add('dark');
-    else if (savedTheme === 'light') document.documentElement.classList.remove('dark');
+    if (savedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+    } else if (savedTheme === 'light') {
+        document.documentElement.classList.remove('dark');
+    }
 }
 
 function toggleTheme() {
     const isNowDark = document.documentElement.classList.toggle('dark');
     saveLocal('kuet_ese32_theme', isNowDark ? 'dark' : 'light');
 }
+
+// ================= PWA SERVICE WORKER & INSTALL APP LOGIC =================
+let deferredInstallPrompt = null;
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+            console.warn('Service Worker registration failed:', err);
+        });
+    });
+}
+
+if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    window.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('installAppBtn');
+        if (btn) btn.classList.add('hidden');
+    });
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const btn = document.getElementById('installAppBtn');
+    if (btn) btn.classList.remove('hidden');
+});
+
+async function triggerInstallApp() {
+    if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        if (outcome === 'accepted') {
+            const btn = document.getElementById('installAppBtn');
+            if (btn) btn.classList.add('hidden');
+        }
+        deferredInstallPrompt = null;
+    } else {
+        alert(
+            "📲 To install ESE 3-2 Hub as an App on your device:\n\n" +
+            "• Android (Chrome): Tap the 3 dots (⋮) at the top-right and select 'Add to Home screen' or 'Install app'.\n\n" +
+            "• iPhone (Safari): Tap the 'Share' button at the bottom and select 'Add to Home Screen'."
+        );
+    }
+}
+
+window.addEventListener('appinstalled', () => {
+    const btn = document.getElementById('installAppBtn');
+    if (btn) btn.classList.add('hidden');
+});
 
 window.addEventListener('DOMContentLoaded', initPortal);
