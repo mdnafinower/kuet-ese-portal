@@ -151,10 +151,16 @@
 
             <!-- Right Actions -->
             <div class="flex items-center gap-2">
-                <!-- Install Web App Button (Auto-shows on supported devices or opens instructions) -->
+                <!-- Student Notification Bell Button (Visible to Everyone) -->
+                <button id="enableNotifyBtn" onclick="requestPushNotificationPermission()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/30 transition" title="Get mobile notifications when classes are canceled or notices are posted">
+                    <i data-lucide="bell-ring" class="w-4 h-4"></i>
+                    <span id="notifyBtnText">Enable Alerts</span>
+                </button>
+
+                <!-- Install Web App Button -->
                 <button id="installAppBtn" onclick="triggerInstallApp()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition">
                     <i data-lucide="download" class="w-4 h-4"></i>
-                    <span>Install App</span>
+                    <span class="hidden sm:inline">Install App</span>
                 </button>
 
                 <button id="adminToggleBtn" onclick="handleAdminToggle()" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition">
@@ -162,17 +168,11 @@
                     <span id="adminBtnText">Admin</span>
                 </button>
 
-                <button onclick="requestPushNotificationPermission()" class="px-3 py-1 rounded-lg bg-teal-700 hover:bg-teal-600 text-white font-semibold transition flex items-center gap-1.5" title="Enable device push notifications">
-                     <i data-lucide="bell" class="w-3.5 h-3.5"></i>
-                      Enable Notifications
-                </button>
-
                 <button onclick="toggleTheme()" class="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition" title="Toggle Dark Mode">
                     <i data-lucide="moon" class="w-4 h-4 dark:hidden"></i>
                     <i data-lucide="sun" class="w-4 h-4 hidden dark:block text-amber-400"></i>
                 </button>
             </div>
-        </div>
 
         <!-- Mobile Navigation Bar -->
         <div class="flex md:hidden overflow-x-auto custom-scrollbar px-4 py-2 gap-1.5 border-t border-slate-200/60 dark:border-slate-800/60">
