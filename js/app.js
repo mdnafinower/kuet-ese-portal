@@ -14,7 +14,7 @@
 // 2. Click "Build" -> "Realtime Database" -> "Create Database" -> "Start in Test Mode"
 // 3. Copy the URL (looks like: https://kuet-ese-32-default-rtdb.firebaseio.com) and paste below:
 // ==========================================================================
-const DEFAULT_FIREBASE_DB_URL = ""; // <-- PASTE YOUR URL INSIDE THESE QUOTES
+cconst DEFAULT_FIREBASE_DB_URL = "https://kuet-ese32-default-rtdb.firebaseio.com";; // <-- PASTE YOUR URL INSIDE THESE QUOTES
 
 // ================= SAFE LOCAL STORAGE HELPERS =================
 function saveLocal(key, value) {
